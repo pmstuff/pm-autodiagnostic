@@ -1,20 +1,27 @@
-<!-- Chosen Palette: Indigo (Main), Gray (Background), Pink (Accent/Buttons), Reddish-Orange (Chart) -->
-<!-- Application Structure Plan: Dashboard (Dos Columnas). Columna 1 (Izquierda, 2/3): Visualización del informe (Gráfico Radar, Media). Columna 2 (Derecha, 1/3): Interacción/Input (Sliders de puntuación y Textos de Reflexión). Esta estructura es óptima porque separa la entrada de datos del resultado del informe, permitiendo al usuario ver el impacto de sus respuestas en tiempo real. La navegación es intuitiva y lineal (rellenar de arriba abajo, visualizar a la izquierda). -->
-<!-- Visualization & Content Choices: 
-1. Puntuaciones -> Goal: Comparar fortalezas/debilidades -> Viz: Gráfico de Radar (Canvas, dibujo manual) -> Interaction: Sliders de puntuación (input range) que actualizan el gráfico en tiempo real -> Justification: El Radar Chart es el mejor método para visualizar un perfil de competencias multifactorial de forma sintetizada. 
-2. Media Aritmética -> Goal: Informar del rendimiento general -> Viz: Métrica de texto dinámica (HTML) -> Interaction: Actualización automática al mover sliders -> Justification: Da un valor único y rápido de la evaluación.
+<!-- Chosen Palette: Indigo (Main), Gray (Background), Chart Accent (#ff9e81) --><!-- Application Structure Plan: Dashboard (Dashboard de 3 Secciones). 
+1. Panel Principal (Columna 1/2): Visualización del Gráfico Radar y Sliders (Entrada de Datos del Punto 1) lado a lado para feedback instantáneo.
+2. Panel Lateral (Columna 3): Deshabilitado o eliminado.
+3. Sección Inferior (Full Width): Contenido del Punto 2 (Reflexiones) organizado en un layout de rejilla (Grid) para acomodar futuras preguntas por parejas. 
+Esta estructura prioriza el feedback visual inmediato y organiza el contenido cualitativo (reflexiones) en un formato más ordenado y escalable.
+--><!-- Visualization & Content Choices: 
+1. Puntuaciones -> Goal: Comparar fortalezas/debilidades -> Viz: Gráfico de Radar (Canvas, dibujo manual) -> Interaction: Sliders de puntuación (input range) que actualizan el gráfico en tiempo real -> Justification: El Radar Chart es el mejor método para visualizar un un perfil de competencias multifactorial de forma sintetizada. 
+2. Media Aritmética & Nivel -> Goal: Informar del rendimiento general y dar feedback motivacional -> Viz: Métrica de texto dinámica (HTML) -> Interaction: Actualización automática al mover sliders -> Justification: Proporciona feedback instantáneo y clasifica el estado general del PM.
 3. Reflexiones -> Goal: Capturar insights cualitativos -> Viz: Textareas (HTML) -> Interaction: Entrada de texto que valida el formulario para la exportación -> Justification: Captura datos narrativos esenciales para el informe. 
 4. Exportar -> Goal: Documentar y compartir -> Viz: Botón (HTML) -> Interaction: Generación de PDF (jsPDF) -> Justification: Convierte el SPA en un informe formal.
-CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
-<!DOCTYPE html>
+CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Autodiagnóstico PM (Gráfico Radar)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Librería para generar PDF -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Librería para generar PDF --><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        /* Definición de colores custom para el botón, basados en el color del gráfico */
+        .bg-chart-accent { background-color: #ff9e81; }
+        .hover\:bg-chart-dark:hover { background-color: #f78c6e; } /* Tono ligeramente más oscuro para el hover */
+        .focus\:ring-chart-accent:focus { --tw-ring-color: #ff9e81; }
+    </style>
     <script>
         
         // Ejes del gráfico de radar
@@ -33,7 +40,10 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
             reflections: {
                 impacto: "",
                 admiracion: "",
-                lanzamiento: ""
+                lanzamiento: "",
+                stakeholders: "", // Anterior
+                creatividad: "", // Nuevo
+                gestionEquipo: "" // Nuevo
             },
         };
 
@@ -41,9 +51,13 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
 
         window.onload = function() {
             // Inicialización de la aplicación sin Firebase para uso estático/online.
-            document.getElementById('loading-status').classList.add('hidden'); 
-            document.getElementById('user-id-display').classList.add('hidden'); 
-            document.getElementById('save-status').classList.add('hidden'); 
+            
+            const userIdDisplay = document.getElementById('user-id-display');
+            if (userIdDisplay) userIdDisplay.classList.add('hidden');
+            
+            const saveStatus = document.getElementById('save-status');
+            if (saveStatus) saveStatus.classList.add('hidden');
+            
             renderUI();
             updateButtonState();
         };
@@ -56,16 +70,40 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
             const sum = scores.reduce((acc, score) => acc + score, 0);
             return (sum / scores.length).toFixed(2);
         }
+        
+        function getScaleMessage(average) {
+            const avg = parseFloat(average);
+            let message = "";
+            
+            // Si la media es exactamente 3.00, es el estado inicial. Muestra mensaje neutral.
+            if (avg === 3.00) {
+                return "Haz el test y mira dónde te encuentras como PM";
+            }
+            
+            if (avg >= 0 && avg <= 1.5) {
+                message = "Ánimo, estás empezando tu camino";
+            } else if (avg >= 1.6 && avg <= 2.99) {
+                message = "Lo estás haciendo muy bien, ya queda poco";
+            } else if (avg >= 3.01 && avg <= 4.5) { // Usar 3.01 para evitar el conflicto con el estado inicial 3.00
+                message = "Ya lo tienes, ahora solo queda pulir los aspectos menos notables";
+            } else if (avg >= 4.6 && avg <= 5) {
+                message = "Estás listo para cualquier desafío como PM, pero no te relajes";
+            }
+            return `¡${message}!`; // Añadir exclamaciones si es un resultado real
+        }
 
         // --- FORM VALIDATION AND BUTTON STATE ---
 
         function checkFormCompletion() {
-            // Check if all reflection fields are non-empty
+            // Check if all reflection fields are non-empty (Ahora 6 campos)
             const reflections = assessmentData.reflections;
             return (
                 reflections.impacto && reflections.impacto.trim().length > 0 &&
                 reflections.admiracion && reflections.admiracion.trim().length > 0 &&
-                reflections.lanzamiento && reflections.lanzamiento.trim().length > 0
+                reflections.lanzamiento && reflections.lanzamiento.trim().length > 0 &&
+                reflections.stakeholders && reflections.stakeholders.trim().length > 0 &&
+                reflections.creatividad && reflections.creatividad.trim().length > 0 &&
+                reflections.gestionEquipo && reflections.gestionEquipo.trim().length > 0
             );
         }
         
@@ -75,12 +113,18 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
             
             if (exportBtn) {
                 exportBtn.disabled = !isComplete;
+                
+                // Clases comunes para el botón
+                exportBtn.classList.add('text-white', 'font-bold', 'py-3', 'px-6', 'rounded-lg', 'shadow-md', 'transition', 'duration-300', 'transform', 'hover:scale-[1.02]', 'focus:outline-none', 'focus:ring-4', 'focus:ring-opacity-50');
+
                 if (isComplete) {
+                    // Estado Habilitado: Color del gráfico (#ff9e81)
                     exportBtn.classList.remove('bg-gray-400', 'hover:bg-gray-400');
-                    exportBtn.classList.add('bg-pink-500', 'hover:bg-pink-600');
+                    exportBtn.classList.add('bg-chart-accent', 'hover:bg-chart-dark', 'focus:ring-chart-accent');
                 } else {
-                    exportBtn.classList.add('bg-gray-400', 'hover:bg-gray-400');
-                    exportBtn.classList.remove('bg-pink-500', 'hover:bg-pink-600');
+                    // Estado Deshabilitado: Color gris
+                    exportBtn.classList.add('bg-gray-400');
+                    exportBtn.classList.remove('bg-chart-accent', 'hover:bg-chart-dark', 'focus:ring-chart-accent');
                 }
             }
         }
@@ -123,24 +167,27 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
 
 
         function renderUI() {
-            const formContainer = document.getElementById('assessment-form');
-            if (!formContainer) return;
+            const scoresContainer = document.getElementById('scores-container');
+            const reflectionsContainer = document.getElementById('reflections-container');
             
-            formContainer.innerHTML = '';
+            // CRÍTICO: El error puede ocurrir aquí si los contenedores aún no están cargados.
+            if (!scoresContainer || !reflectionsContainer) return;
+            
+            scoresContainer.innerHTML = '';
+            reflectionsContainer.innerHTML = '';
             
             // Set Name input value
             const nameInput = document.getElementById('name-input');
-            if (nameInput) {
+            if (nameInput) { // Agregada verificación de nulidad
                 nameInput.value = assessmentData.userName;
             }
             
-            // 1. Render Score Sliders
-            formContainer.innerHTML += `<h2 class="text-2xl font-bold mb-4 mt-6 text-gray-800 border-b pb-2">1. Autoevaluación de Competencias (Escala 1-5)</h2>`;
+            // 1. Render Score Sliders (Punto 1)
             radarAxes.forEach(axis => {
                 const currentValue = assessmentData.scores[axis];
                 const cleanAxisName = axis.split('(')[0].trim();
                 
-                formContainer.innerHTML += `
+                scoresContainer.innerHTML += `
                     <div class="mb-6 p-4 bg-white rounded-lg shadow-md border border-gray-100">
                         <label for="${axis}" class="block text-lg font-semibold text-indigo-700 mb-2">${cleanAxisName}</label>
                         <div class="flex items-center">
@@ -152,32 +199,33 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
                 `;
             });
             
-            // 2. Render Reflection Text Areas
-            formContainer.innerHTML += `<h2 class="text-2xl font-bold mb-4 mt-8 text-gray-800 border-b pb-2">2. Reflexión sobre Casos Prácticos</h2>`;
-            
+            // 2. Render Reflection Text Areas (Punto 2)
             const reflections = [
                 { key: 'impacto', title: 'Impacto y Métricas:', question: 'Describe una vez que propusiste una mejora técnica: ¿Cómo la defendiste? ¿Qué métricas usaste para medir su éxito?' },
                 { key: 'admiracion', title: 'Producto Digital Admirado:', question: '¿Qué producto digital admiras y por qué? ¿Qué *pain points* resuelve y cómo lo mejorarías?' },
-                { key: 'lanzamiento', title: 'Proceso de Lanzamiento:', question: 'Si tuvieras que lanzar una nueva funcionalidad desde cero, ¿qué pasos seguirías desde *discovery* hasta producción?' }
+                { key: 'lanzamiento', title: 'Proceso de Lanzamiento:', question: 'Si tuvieras que lanzar una nueva funcionalidad desde cero, ¿qué pasos seguirías desde *discovery* hasta producción?' },
+                { key: 'stakeholders', title: 'Gestión de stakeholders:', question: '¿Cual ha sido tu mayor desafio, proyecto o problema a la hora de alinear tratando con stakeholders y sus espectativas u objetivos esperados?' },
+                { key: 'creatividad', title: 'Diseño y Creatividad:', question: 'Si tuvieras que diseñar una funcionalidad para reducir la fricción en el *checkout* de Amazon, ¿qué harías (solución)? ¿Cómo validarías la hipótesis y qué métrica principal usarías para medir el éxito?' },
+                { key: 'gestionEquipo', title: 'Liderazgo de Equipo:', question: 'Describe un conflicto entre Ingeniería y Diseño que hayas tenido que mediar. ¿Cómo alineaste a los equipos para priorizar el objetivo del producto por encima de sus propias metas?' }
             ];
 
             reflections.forEach(item => {
                 const currentValue = assessmentData.reflections[item.key] || '';
-                formContainer.innerHTML += `
-                    <div class="mb-6 p-4 bg-white rounded-lg shadow-md border border-gray-100">
+                reflectionsContainer.innerHTML += `
+                    <div class="p-4 bg-white rounded-xl shadow-md border border-gray-100">
                         <label for="${item.key}-reflection" class="block text-lg font-semibold text-indigo-700 mb-2">${item.title}</label>
                         <p class="text-sm text-gray-500 mb-2">${item.question}</p>
                         <textarea id="${item.key}-reflection" rows="4" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" onchange="handleReflectionChange('${item.key}', this.value);" oninput="handleReflectionChange('${item.key}', this.value);">${currentValue}</textarea>
                     </div>
                 `;
             });
-
+            
             // Draw the chart after rendering inputs
             drawRadarChart(assessmentData.scores);
             updateButtonState();
         }
 
-        // --- RADAR CHART DRAWING LOGIC ---
+        // --- RADAR CHART DRAWING LOGIC (REWRITTEN FOR MARGINS) ---
 
         function drawRadarChart(scores) {
             const canvas = document.getElementById('radar-chart');
@@ -185,34 +233,40 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
 
             const ctx = canvas.getContext('2d');
             
-            // Adjust canvas size for responsiveness
-            const size = Math.min(canvas.offsetWidth, window.innerWidth * 0.9, 450);
-            canvas.width = size;
-            canvas.height = size;
+            // Define un margen fijo para evitar que las etiquetas se corten
+            const margin = 30; // Margen de seguridad para etiquetas
+            const availableSize = Math.min(canvas.offsetWidth, window.innerWidth * 0.9, 450);
+            
+            canvas.width = availableSize;
+            canvas.height = availableSize;
 
-            const center = size / 2;
-            const radius = size / 3; // Max radius for score 5
+            // El tamaño de dibujo efectivo se reduce por el margen
+            const effectiveSize = availableSize - 2 * margin;
+            const center = availableSize / 2;
+            const radius = effectiveSize / 2.5; // Radio ajustado basado en el tamaño efectivo
+
             const numAxes = radarAxes.length;
             const angleStep = (2 * Math.PI) / numAxes;
             const maxScore = 5;
+            const pointRadius = 5; 
+            const textLineHeight = 12; // Altura de línea para fuente de 10px (AJUSTE)
 
-            ctx.clearRect(0, 0, size, size);
+            ctx.clearRect(0, 0, availableSize, availableSize);
 
-            // Function to get coordinate for a given angle and radius (score)
+            // Función para obtener coordenadas (usa el center y radius ajustados)
             const getCoord = (angle, score) => {
                 const r = (score / maxScore) * radius;
                 return {
-                    x: center + r * Math.cos(angle - Math.PI / 2), // Adjust start point to top center
+                    x: center + r * Math.cos(angle - Math.PI / 2),
                     y: center + r * Math.sin(angle - Math.PI / 2)
                 };
             };
             
             // --- 1. Draw Background Grid (Circles/Pentagons) ---
             
-            // Draw score levels (pentagons)
             for (let s = 1; s <= maxScore; s++) {
                 ctx.beginPath();
-                ctx.strokeStyle = s % 2 === 0 ? '#ddd' : '#ccc'; // Alternating lighter/darker
+                ctx.strokeStyle = s % 2 === 0 ? '#ddd' : '#ccc';
                 ctx.lineWidth = 1;
                 
                 for (let i = 0; i < numAxes; i++) {
@@ -228,18 +282,17 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
                 ctx.stroke();
             }
 
-            // --- 2. Draw Axes and Labels ---
+            // --- 2. Draw Axes and Labels (NUEVA LÓGICA DE POSICIONAMIENTO) ---
             
             ctx.fillStyle = '#4B5563';
-            ctx.font = '12px Inter, sans-serif';
-            ctx.textAlign = 'center';
+            ctx.font = '10px Inter, sans-serif'; // FUENTE REDUCIDA A 10PX
             ctx.textBaseline = 'middle';
 
             for (let i = 0; i < numAxes; i++) {
                 const angle = i * angleStep;
                 const endCoord = getCoord(angle, maxScore);
 
-                // Draw axis line
+                // Dibujar línea del eje
                 ctx.beginPath();
                 ctx.strokeStyle = '#9CA3AF';
                 ctx.lineWidth = 1;
@@ -247,43 +300,66 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
                 ctx.lineTo(endCoord.x, endCoord.y);
                 ctx.stroke();
 
-                // Determine label position and alignment for better readability
-                const labelRadius = radius * 1.15; // Place label outside the chart
-                const labelCoord = getCoord(angle, maxScore * 1.15);
+                // POSICIONAMIENTO SEGURO DEL TEXTO: 
+                const safeLabelRadius = radius * 1.09; // Ajustado a 1.09
+                const labelCoord = getCoord(angle, maxScore * 1.09); // Ajustado a 1.09
                 
-                // Text alignment based on angle position
+                // Alineación del texto
                 let alignment = 'center';
-                if (angle > 0 && angle < Math.PI / 2) alignment = 'left';       // Bottom Right
-                else if (angle > Math.PI / 2 && angle < Math.PI) alignment = 'left'; // Bottom Left
-                else if (angle > Math.PI && angle < 3 * Math.PI / 2) alignment = 'right'; // Top Left
-                else if (angle > 3 * Math.PI / 2 && angle < 2 * Math.PI) alignment = 'right'; // Top Right
-
+                let textX = labelCoord.x;
+                
+                if (angle > 0 && angle < Math.PI / 2) alignment = 'left';
+                else if (angle > Math.PI / 2 && angle < Math.PI) alignment = 'left'; 
+                else if (angle > Math.PI && angle < 3 * Math.PI / 2) alignment = 'right'; 
+                else if (angle > 3 * Math.PI / 2 && angle < 2 * Math.PI) alignment = 'right'; 
+                
+                // Ajustar posición X para compensar el ancho del texto
+                if (alignment === 'left') {
+                    textX += 5; // Mover 5px a la derecha del punto
+                } else if (alignment === 'right') {
+                    textX -= 5; // Mover 5px a la izquierda del punto
+                }
+                
                 ctx.textAlign = alignment;
                 
-                // Draw label text (wrapping if necessary)
-                const label = radarAxes[i].split('(')[0].trim();
-                const words = label.split(' ');
-                
-                if (words.length > 2) {
-                    // Try to wrap long labels
-                    const line1 = words.slice(0, Math.ceil(words.length / 2)).join(' ');
-                    const line2 = words.slice(Math.ceil(words.length / 2)).join(' ');
-                    ctx.fillText(line1, labelCoord.x, labelCoord.y - 10);
-                    ctx.fillText(line2, labelCoord.x, labelCoord.y + 10);
+                // Lógica de salto de línea (Con los saltos forzados)
+                let label = radarAxes[i].split('(')[0].trim();
+                let lines = [];
+
+                if (i === 0) { // Visión de Producto y Ciclo de Vida
+                    // Aplicar el ajuste de radio específico a la posición superior
+                    const specificLabelRadius = radius * 1.15; // Ajuste para el punto 0
+                    const specificLabelCoord = getCoord(angle, maxScore * 1.15);
+                    textX = specificLabelCoord.x;
+                    lines = ["Visión de Producto", "y Ciclo de Vida"];
+                } else if (i === 1) { // Conocimiento Técnico Aplicado
+                    lines = ["Conocimiento", "Técnico", "Aplicado"];
+                } else if (i === 2) { // Habilidad de comunicación
+                    lines = ["Habilidad", "de", "comunicación"];
+                } else if (i === 3) { // Liderazgo e influencia
+                    lines = ["Liderazgo", "e influencia"];
+                } else if (i === 4) { // Estrategia, Datos y Negocio
+                    lines = ["Estrategia,", "Datos y", "Negocio"];
                 } else {
-                    ctx.fillText(label, labelCoord.x, labelCoord.y);
+                    lines.push(label); // Fallback
                 }
+                
+                // Coordenada Y de inicio
+                const yOffset = (lines.length - 1) / 2 * textLineHeight;
+
+                lines.forEach((line, lineIndex) => {
+                    ctx.fillText(line, textX, labelCoord.y + (lineIndex * textLineHeight) - yOffset);
+                });
             }
 
             // --- 3. Draw Data Polygon (The Assessment Result) ---
             
-            // Color set to #ff9e81 (255, 158, 129)
             const redColor = '#ff9e81';
-            const rgbaFill = 'rgba(255, 158, 129, 0.4)'; // Semi-transparent fill
+            const rgbaFill = 'rgba(255, 158, 129, 0.4)';
 
             ctx.beginPath();
-            ctx.fillStyle = rgbaFill; // Semi-transparent fill
-            ctx.strokeStyle = redColor; // Solid line color
+            ctx.fillStyle = rgbaFill;
+            ctx.strokeStyle = redColor;
             ctx.lineWidth = 2;
 
             radarAxes.forEach((axis, i) => {
@@ -297,9 +373,9 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
                     ctx.lineTo(coord.x, coord.y);
                 }
                 
-                // Draw data point circle (red)
+                // Dibujar punto
                 ctx.beginPath();
-                ctx.arc(coord.x, coord.y, 4, 0, 2 * Math.PI);
+                ctx.arc(coord.x, coord.y, pointRadius, 0, 2 * Math.PI);
                 ctx.fillStyle = redColor;
                 ctx.fill();
             });
@@ -307,16 +383,62 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
             ctx.closePath();
             ctx.fill();
             ctx.stroke();
+            
+            // --- 4. Draw Specific Connection Lines ---
 
-            // Render Average Score after chart draw is complete
+            const connections = [
+                [0, 1], [0, 4], [4, 3], [3, 2], [2, 1]
+            ];
+
+            ctx.strokeStyle = redColor;
+            ctx.lineWidth = 3; 
+
+            connections.forEach(([indexA, indexB]) => {
+                const scoreA = scores[radarAxes[indexA]];
+                const scoreB = scores[radarAxes[indexB]];
+
+                if (scoreA !== undefined && scoreB !== undefined) {
+                    const angleA = indexA * angleStep;
+                    const angleB = indexB * angleStep;
+                    
+                    const coordA = getCoord(angleA, scoreA);
+                    const coordB = getCoord(angleB, scoreB);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(coordA.x, coordA.y);
+                    ctx.lineTo(coordB.x, coordB.y);
+                    ctx.stroke();
+                }
+            });
+
+
+            // Render Average Score and Scale Message
             const average = calculateAverageScore();
-            document.getElementById('average-display').innerHTML = `<p class="text-lg font-bold text-gray-800">Media de tus respuestas: <span class="text-indigo-700">${average}</span></p>`;
+            const message = getScaleMessage(average);
+            
+            const averageDisplay = document.getElementById('average-display');
+            
+            if (!averageDisplay) return;
+
+            const mediaFontSize = '1.125rem'; 
+            const scaleFontSize = '0.875rem'; 
+            
+            averageDisplay.innerHTML = `
+                <div class="flex flex-col items-center lg:items-end space-y-1">
+                    <p class="font-bold text-gray-800" style="font-size: ${mediaFontSize};">
+                        Media de tus respuestas: <span class="text-indigo-700">${average}</span>
+                    </p>
+                    <p class="text-indigo-700 font-normal" style="font-size: ${scaleFontSize};">
+                        ${message}
+                    </p>
+                </div>
+            `;
         }
 
         // --- PDF EXPORT LOGIC ---
         function exportPDF() {
             if (!checkFormCompletion()) {
-                showSnackbar("Rellena el test de autoevaluación primero");
+                showSnackbar("Completa las respuestas para poder exportarlo");
                 return;
             }
 
@@ -369,14 +491,23 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
             y += imgHeight + 10;
 
             // ------------------------------------
-            // 2. Media Aritmética - (Aún en la primera página, debajo del gráfico)
+            // 2. Media Aritmética y Escala de Nivel - (Aún en la primera página, debajo del gráfico)
             // ------------------------------------
             const average = calculateAverageScore();
+            const scaleMessage = getScaleMessage(average);
+            
+            // Media (Negrita)
             doc.setFontSize(14);
             doc.setFont("helvetica", "bold");
-            // 195 es 210 (ancho A4) - 15 (margen derecho)
             doc.text(`Media de tus respuestas: ${average}`, (210 - margin), y, null, null, 'right');
-            doc.setFont("helvetica", "normal"); // Resetear fuente
+            y += 5;
+
+            // Mensaje de Escala (Normal, Fuente más pequeña)
+            doc.setFontSize(12); // Dos puntos menos que 14
+            doc.setFont("helvetica", "normal");
+            // Se asume que el mensaje es corto y se puede alinear a la derecha debajo de la media
+            doc.text(scaleMessage, (210 - margin), y, null, null, 'right');
+            y += 10; // Espacio después de la escala
             
             // ------------------------------------
             // 3. Reflexiones (Punto 2) - SEGUNDA PÁGINA
@@ -393,7 +524,10 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
             const reflections = [
                 { key: 'impacto', title: 'Impacto y Métricas:', question: 'Describe una vez que propusiste una mejora técnica: ¿Cómo la defendiste? ¿Qué métricas usaste para medir su éxito?' },
                 { key: 'admiracion', title: 'Producto Digital Admirado:', question: '¿Qué producto digital admiras y por qué? ¿Qué *pain points* resuelve y cómo lo mejorarías?' },
-                { key: 'lanzamiento', title: 'Proceso de Lanzamiento:', question: 'Si tuvieras que lanzar una nueva funcionalidad desde cero, ¿qué pasos seguirías desde *discovery* hasta producción?' }
+                { key: 'lanzamiento', title: 'Proceso de Lanzamiento:', question: 'Si tuvieras que lanzar una nueva funcionalidad desde cero, ¿qué pasos seguirías desde *discovery* hasta producción?' },
+                { key: 'stakeholders', title: 'Gestión de stakeholders:', question: '¿Cual ha sido tu mayor desafio, proyecto o problema a la hora de alinear tratando con stakeholders y sus espectativas u objetivos esperados?' },
+                { key: 'creatividad', title: 'Diseño y Creatividad:', question: 'Si tuvieras que diseñar una funcionalidad para reducir la fricción en el *checkout* de Amazon, ¿qué harías (solución)? ¿Cómo validarías la hipótesis y qué métrica principal usarías para medir el éxito?' },
+                { key: 'gestionEquipo', title: 'Liderazgo de Equipo:', question: 'Describe un conflicto entre Ingeniería y Diseño que hayas tenido que mediar. ¿Cómo alineaste a los equipos para priorizar el objetivo del producto por encima de sus propias metas?' }
             ];
 
             doc.setFontSize(12);
@@ -446,12 +580,17 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
             drawRadarChart(assessmentData.scores);
         });
         
+        // Ensure initial UI is rendered if window.onload fires too late
+        window.setTimeout(() => {
+            // El check se realiza en renderUI(), pero aseguramos que se llama
+            renderUI();
+        }, 50);
+        
     </script>
 </head>
 <body class="bg-gray-50 min-h-screen font-sans">
 
-    <!-- Tailwind Config for Inter Font -->
-    <script>
+    <!-- Tailwind Config for Inter Font --><script>
         tailwind.config = {
             theme: {
                 extend: {
@@ -463,15 +602,13 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
         }
     </script>
 
-    <!-- Header -->
-    <header class="bg-indigo-700 text-white p-4 shadow-lg sticky top-0 z-10">
+    <!-- Header --><header class="bg-indigo-700 text-white p-4 shadow-lg sticky top-0 z-10">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <h1 class="text-xl sm:text-3xl font-extrabold tracking-tight">Autodiagnóstico PM (Mes 1)</h1>
             
             <div class="flex items-center space-x-4 text-sm">
-                <!-- Campo Nombre -->
-                <div class="flex flex-col items-start sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-2">
-                    <label for="name-input" class="font-semibold whitespace-nowrap">Nombre:</label>
+                <!-- Campo Nombre --><div class="flex flex-col items-start sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-2">
+                    <label for="name-input" class="font-semibold whitespace-rap">Nombre:</label>
                     <input 
                         type="text" 
                         id="name-input" 
@@ -482,57 +619,61 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
                         oninput="handleNameChange(this.value);"
                     />
                 </div>
-                <!-- ID de Usuario - Oculto al no usar Firebase -->
-                <div class="text-xs sm:text-sm opacity-80 hidden" id="user-id-display"></div>
+                <!-- ID de Usuario - Oculto al no usar Firebase --><div class="text-xs sm:text-sm opacity-80 hidden" id="user-id-display"></div>
             </div>
         </div>
     </header>
 
-    <!-- Main Content Grid -->
-    <main class="max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <!-- Main Content Grid --><main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
         
-        <!-- VISUALIZATION PANEL (2/3 width on large screens) -->
-        <section class="lg:col-span-2 bg-white p-6 rounded-xl shadow-2xl border border-indigo-100 h-fit sticky top-[68px]">
-            <h2 class="text-2xl font-bold text-indigo-800 mb-4">Gráfico de Competencias (Radar Chart)</h2>
-            <div id="loading-status" class="text-center py-8 text-indigo-500 font-semibold hidden"></div>
-            <div class="flex justify-center items-center p-4">
-                <canvas id="radar-chart" class="w-full max-w-lg"></canvas>
-            </div>
-            <div class="mt-4">
-                <p class="text-sm text-center text-gray-600">Este gráfico muestra tu autoevaluación en una escala de **1 (mínimo)** a **5 (experto)**.</p>
-                <!-- MEDIA ARITMÉTICA -->
-                <div id="average-display" class="mt-4 text-center lg:text-right">
-                    <!-- Contenido de la media se renderiza aquí -->
+        <!-- SECTION 1: VISUALIZATION & SLIDERS (Grid Layout) --><section class="bg-white p-6 rounded-xl shadow-2xl border border-indigo-100">
+            <h2 class="text-2xl font-bold text-indigo-800 mb-6 border-b pb-2">1. Autoevaluación de Competencias (Escala 1-5)</h2>
+            <!-- CAMBIO DE LAYOUT: Gráfico 8/12, Sliders 4/12 --><div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                <!-- Columna 1: Gráfico (8/12) -->
+                <div class="lg:col-span-8 h-fit sticky lg:top-[68px]">
+                    <div class="flex justify-center items-center p-4">
+                        <canvas id="radar-chart" class="w-full max-w-xl"></canvas>
+                    </div>
+                    <div class="mt-4">
+                        <!-- MEDIA ARITMÉTICA Y ESCALA (Arriba) --><div id="average-display" class="mb-2 text-center lg:text-right">
+                            <!-- Contenido de la media y escala se renderiza aquí --></div>
+                        <!-- LEYENDA ESTÁTICA (Abajo y más pequeña) --><p class="text-[0.6rem] mt-4 text-center lg:text-right text-gray-600">Este gráfico muestra tu autoevaluación en una escala de **1 (mínimo)** a **5 (experto)**.</p>
+                        <!-- Estado de guardado - Oculto al no usar Firebase --><div id="save-status" class="mt-2 text-sm text-green-600 font-medium text-center lg:text-right hidden"></div>
+                    </div>
                 </div>
-                <!-- Estado de guardado - Oculto al no usar Firebase -->
-                <div id="save-status" class="mt-2 text-sm text-green-600 font-medium text-center lg:text-right hidden"></div>
+
+                <!-- Columna 2: Sliders (Punto 1 - 4/12) -->
+                <div class="lg:col-span-4 space-y-4" id="scores-container">
+                    <!-- Content generated by renderUI() --></div>
             </div>
         </section>
 
-        <!-- INPUT FORM PANEL (1/3 width on large screens) -->
-        <section class="lg:col-span-1">
-            <div id="assessment-form" class="space-y-4">
-                <!-- Content generated by renderUI() -->
+        <!-- SECTION 2: REFLECTIONS (Full Width, Grid Layout) --><section class="bg-white p-6 rounded-xl shadow-2xl border border-indigo-100">
+            <h2 class="text-2xl font-bold text-indigo-800 mb-6 border-b pb-2">2. Reflexión sobre Casos Prácticos</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="reflections-container">
+                <!-- Content generated by renderUI() --></div>
+            <!-- Nueva línea de instrucción al final de la sección --><div class="mt-6 col-span-full text-right">
+                <p class="text-xs text-gray-500 font-medium">
+                    * Si no se te viene nada a la cabeza para alguna pregunta, responde **N/A**.
+                </p>
             </div>
         </section>
+        
+        <!-- Botón de Exportación a PDF (Posición final debajo de la Sección 2) -->
+        <div class="max-w-7xl mx-auto px-4 pb-4 flex justify-center">
+            <!-- El botón es inicialmente deshabilitado por el script --><button id="export-pdf-btn" onclick="checkFormCompletion() ? exportPDF() : showSnackbar('Completa las respuestas para poder exportarlo');" class="bg-gray-400 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-pink-400 focus:ring-opacity-50" disabled>
+                Exportar a PDF
+            </button>
+        </div>
 
     </main>
     
-    <!-- Botón de Exportación a PDF (No fijo, al final de main) -->
-    <div class="max-w-7xl mx-auto px-4 pb-8 flex justify-center">
-        <!-- El botón es inicialmente deshabilitado por el script -->
-        <button id="export-pdf-btn" onclick="checkFormCompletion() ? exportPDF() : showSnackbar('Rellena el test de autoevaluación primero');" class="bg-gray-400 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-pink-400 focus:ring-opacity-50" disabled>
-            Exportar a PDF
-        </button>
-    </div>
-    
-    <!-- Snackbar for Notifications -->
-    <div id="snackbar" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-lg shadow-xl transition-opacity duration-300 opacity-0 invisible z-50">
-        Rellena el test de autoevaluación primero
+    <!-- Snackbar for Notifications --><div id="snackbar" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-lg shadow-xl transition-opacity duration-300 opacity-0 invisible z-50">
+        Completa las respuestas para poder exportarlo
     </div>
 
-    <!-- Footer with Scale Description -->
-    <footer class="bg-gray-200 mt-10 p-4 text-sm text-gray-700">
+    <!-- Footer with Scale Description --><footer class="bg-gray-200 mt-10 p-4 text-sm text-gray-700">
         <div class="max-w-7xl mx-auto px-4">
             <h3 class="font-bold mb-2 text-left">Escala de autoevaluación</h3>
             <p class="mb-1 text-left">🤓 **1 - Sin experiencia:** No tengo conocimientos ni experiencia práctica.</p>
