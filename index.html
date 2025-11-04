@@ -2,11 +2,11 @@
 1. Panel Principal (Columna 1/2): Visualización del Gráfico Radar y Sliders (Entrada de Datos del Punto 1) lado a lado para feedback instantáneo.
 2. Panel Lateral (Columna 3): Deshabilitado o eliminado.
 3. Sección Inferior (Full Width): Contenido del Punto 2 (Reflexiones) organizado en un layout de rejilla (Grid) para acomodar futuras preguntas por parejas. 
-Esta estructura prioriza el feedback visual inmediato y organiza el contenido cualitativo (reflexiones) en un formato más ordenado y escalable.
+Esta estructura prioriza el feedback visual inmediato y organiza el contenido cualitativo (reflexiones) y el checklist (Sección 3) en un formato más ordenado y escalable.
 --><!-- Visualization & Content Choices: 
 1. Puntuaciones -> Goal: Comparar fortalezas/debilidades -> Viz: Gráfico de Radar (Canvas, dibujo manual) -> Interaction: Sliders de puntuación (input range) que actualizan el gráfico en tiempo real -> Justification: El Radar Chart es el mejor método para visualizar un un perfil de competencias multifactorial de forma sintetizada. 
 2. Media Aritmética & Nivel -> Goal: Informar del rendimiento general y dar feedback motivacional -> Viz: Métrica de texto dinámica (HTML) -> Interaction: Actualización automática al mover sliders -> Justification: Proporciona feedback instantáneo y clasifica el estado general del PM.
-3. Reflexiones -> Goal: Capturar insights cualitativos -> Viz: Textareas (HTML) -> Interaction: Entrada de texto que valida el formulario para la exportación -> Justification: Captura datos narrativos esenciales para el informe. 
+3. Reflexiones/Checklist -> Goal: Capturar insights cualitativos y evaluar progreso de habilidades -> Viz: Textareas/Checklists (HTML) -> Interaction: Entrada de texto/Persistencia en LocalStorage y filtrado por experiencia -> Justification: Captura datos narrativos esenciales y permite autoevaluación progresiva.
 4. Exportar -> Goal: Documentar y compartir -> Viz: Botón (HTML) -> Interaction: Generación de PDF (jsPDF) -> Justification: Convierte el SPA en un informe formal.
 CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
 <html lang="es">
@@ -21,6 +21,12 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
         .bg-chart-accent { background-color: #ff9e81; }
         .hover\:bg-chart-dark:hover { background-color: #f78c6e; } /* Tono ligeramente más oscuro para el hover */
         .focus\:ring-chart-accent:focus { --tw-ring-color: #ff9e81; }
+        
+        /* Estilo para el hover de las cards del checklist */
+        .checklist-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
     </style>
     <script>
         
@@ -30,10 +36,189 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             "Conocimiento Técnico Aplicado (1B)",
             "Habilidad de Comunicación (2A)",
             "Liderazgo e Influencia (2B/2C)",
-            "Estrategia, Datos y Negocio (3B/4)"
+            "Estrategia, Datos y Negocio (3B/4)",
+            "Mindset y Cultura de Producto (6)" // NUEVO EJE AÑADIDO
         ];
 
-        // Estado inicial de la evaluación (Datos en memoria)
+        // --- DATOS DEL CHECKLIST DE HABILIDADES ---
+        const CHECKLIST_DATA = {
+            "0-6 meses": [
+                { id: "0-6_fund_basicos", title: "Fundamentos de Producto - Conceptos Básicos", items: [
+                    "Comprender qué es un Product Manager y su rol en la organización", "Entender el ciclo de vida completo de un producto digital", "Conocer la diferencia entre outcomes vs outputs", "Aprender qué es un roadmap de producto y cómo se construye", "Dominar la priorización de un Product Backlog", "Familiarizarse con metodologías ágiles (Scrum, Kanban)"
+                ], badge: "0-6 meses" },
+                { id: "0-6_fund_disc", title: "Fundamentos de Producto - Discovery y Validación", items: [
+                    "Aprender a validar hipótesis en el mercado antes de implementar", "Realizar entrevistas con usuarios efectivas", "Entender qué es un MVP y cómo definirlo", "Conocer técnicas básicas de user research", "Aprender a identificar pain points y oportunidades de mercado", "Practicar la creación de user personas"
+                ], badge: "0-6 meses" }
+            ],
+            "6-12 meses": [
+                { id: "6-12_estr_vis", title: "Estrategia y Planificación - Visión de Producto", items: [
+                    "Desarrollar y comunicar una visión de producto clara", "Alinear la estrategia de producto con objetivos de negocio", "Aprender a hacer análisis de competencia efectivos", "Identificar oportunidades de mercado y propuesta de valor", "Definir y comunicar el posicionamiento del producto"
+                ], badge: "6-12 meses" },
+                { id: "6-12_estr_frame", title: "Estrategia y Planificación - Frameworks y Priorización", items: [
+                    "Dominar frameworks de priorización (RICE, MoSCoW, Kano)", "Aprender a definir y trabajar con OKRs", "Entender el modelo de Jobs-to-be-Done", "Practicar técnicas de priorización con stakeholders", "Desarrollar criterios de decisión basados en impacto vs esfuerzo"
+                ], badge: "6-12 meses" },
+                { id: "6-12_metricas", title: "Métricas y Análisis - Product Analytics", items: [
+                    "Definir KPIs relevantes para medir éxito del producto", "Aprender herramientas de analítica (Google Analytics, Mixpanel, Amplitude)", "Interpretar datos de usuario y comportamiento", "Realizar experimentos y A/B testing", "Calcular y entender métricas clave (retención, conversión, CAC, LTV)", "Tomar decisiones data-driven"
+                ], badge: "6-12 meses" }
+            ],
+            "12-18 meses": [
+                { id: "12-18_ejec_des", title: "Ejecución y Delivery - Gestión del Desarrollo", items: [
+                    "Colaborar efectivamente con equipos de ingeniería", "Escribir user stories claras y completas", "Participar activamente en ceremonias ágiles", "Gestionar el backlog de forma efectiva", "Entender deuda técnica y su impacto", "Negociar scope y tiempos de entrega"
+                ], badge: "12-18 meses" },
+                { id: "12-18_ejec_gtm", title: "Ejecución y Delivery - Lanzamiento y Go-to-Market", items: [
+                    "Planificar y ejecutar lanzamientos de producto", "Coordinar equipos multifuncionales para lanzamientos", "Desarrollar estrategias de go-to-market básicas", "Crear materiales de comunicación de producto", "Medir y reportar el éxito de lanzamientos"
+                ], badge: "12-18 meses" }
+            ],
+            "18-36 meses": [
+                { id: "18-36_soft_com", title: "Soft Skills y Liderazgo - Comunicación", items: [
+                    "Comunicar ideas a audiencias técnicas y no técnicas", "Desarrollar storytelling efectivo de producto", "Presentar a stakeholders y líderes senior", "Escuchar activamente y practicar empatía", "Adaptar el mensaje según el público objetivo", "Facilitar workshops y sesiones colaborativas"
+                ], badge: "18-36 meses" },
+                { id: "18-36_soft_infl", title: "Soft Skills y Liderazgo - Influencia y Negociación", items: [
+                    "Liderar sin autoridad directa", "Negociar prioridades con stakeholders diversos", "Gestionar conflictos de intereses en el equipo", "Defender decisiones de producto con datos", "Construir consenso en situaciones de desacuerdo", "Vender una visión de producto internamente"
+                ], badge: "18-36 meses" },
+                { id: "18-36_soft_time", title: "Soft Skills y Liderazgo - Gestión del Tiempo", items: [
+                    "Priorizar tareas propias efectivamente", "Manejar múltiples proyectos simultáneamente", "Delegar tareas apropiadamente", "Automatizar procesos repetitivos", "Eliminar actividades que no generan valor", "Establecer sistemas de trabajo eficientes"
+                ], badge: "18-36 meses" },
+                { id: "18-36_crec_estr", title: "Crecimiento Avanzado - Pensamiento Estratégico", items: [
+                    "Desarrollar visión a largo plazo del producto", "Evaluar impacto de decisiones a nivel organizacional", "Entender interconexión entre productos y equipos", "Pensar en términos de portfolio de productos", "Anticipar tendencias de mercado y tecnología", "Contribuir a la estrategia corporativa"
+                ], badge: "18-36 meses" },
+                { id: "18-36_crec_ment", title: "Crecimiento Avanzado - Mentoring y Liderazgo", items: [
+                    "Mentorar a PMs más junior", "Establecer y comunicar principios de producto", "Influir en la cultura de producto de la organización", "Desarrollar otros líderes de producto", "Escalar procesos y metodologías", "Ser referente en temas específicos de producto"
+                ], badge: "18-36 meses" },
+                { id: "18-36_crec_esp", title: "Crecimiento Avanzado - Especialización", items: [
+                    "Profundizar en áreas técnicas (APIs, arquitectura, IA)", "Especializarse en industrias o verticales", "Dominar técnicas avanzadas de growth o monetización", "Convertirse en experto en plataformas o ecosistemas", "Desarrollar expertise en producto B2B, B2C o marketplace", "Mantenerse actualizado en tendencias y herramientas emergentes"
+                ], badge: "18-36 meses" },
+                { id: "18-36_mindset", title: "Mindset y Cultura de Producto - Principios Fundamentales", items: [
+                    "Adoptar mentalidad de outcomes sobre outputs", "Ser customer-obsessed en todas las decisiones", "Practicar aprendizaje continuo y experimentación", "Desarrollar tolerancia a la ambigüedad", "Mantener balance entre visión y pragmatismo", "Fomentar colaboración sobre jerarquía"
+                ], badge: "18-36 meses" }
+            ],
+            "Más de 36 meses": [] // No se requiere contenido adicional, solo acumulación
+        };
+
+        const EXPERIENCE_MAP = {
+            "0-6 meses": ["0-6 meses"],
+            "6-12 meses": ["0-6 meses", "6-12 meses"],
+            "12-18 meses": ["0-6 meses", "6-12 meses", "12-18 meses"],
+            "18-36 meses": ["0-6 meses", "6-12 meses", "12-18 meses", "18-36 meses"],
+            "Más de 36 meses": ["0-6 meses", "6-12 meses", "12-18 meses", "18-36 meses"]
+        };
+
+
+        // --- ESTADO Y PERSISTENCIA DEL CHECKLIST ---
+        
+        let checklistState = JSON.parse(localStorage.getItem('pmChecklistState')) || {};
+
+        function saveChecklistState(groupId, itemId, isChecked) {
+            if (!checklistState[groupId]) {
+                checklistState[groupId] = {};
+            }
+            checklistState[groupId][itemId] = isChecked;
+            localStorage.setItem('pmChecklistState', JSON.stringify(checklistState));
+            updateProgress(groupId);
+        }
+
+        function isItemChecked(groupId, itemId) {
+            return checklistState[groupId] && checklistState[groupId][itemId];
+        }
+
+        function updateProgress(groupId) {
+            const card = document.getElementById(groupId);
+            if (!card) return;
+
+            const period = card.getAttribute('data-period');
+            const groupData = CHECKLIST_DATA[period].find(g => g.id === groupId);
+            if (!groupData) return;
+
+            const total = groupData.items.length;
+            const completed = groupData.items.filter((_, index) => isItemChecked(groupId, index)).length;
+            const percentage = (completed / total) * 100;
+
+            const progressText = card.querySelector('.progress-text');
+            const progressBar = card.querySelector('.progress-bar');
+            
+            if (progressText) progressText.textContent = `${completed}/${total} completados`;
+            if (progressBar) progressBar.style.width = `${percentage}%`;
+        }
+
+        // --- MANEJO DE LA EXPERIENCIA Y RENDERIZADO DEL CHECKLIST ---
+
+        function handleExperienceChange(selectedValue) {
+            const container = document.getElementById('checklist-container');
+            if (!container) return;
+
+            // Mostrar el container antes de rellenarlo
+            container.classList.remove('opacity-0', 'scale-95');
+            container.classList.add('opacity-100', 'scale-100');
+
+            container.innerHTML = ''; // Limpiar contenido anterior
+            
+            const periodsToShow = EXPERIENCE_MAP[selectedValue] || [];
+            
+            periodsToShow.forEach(period => {
+                const groups = CHECKLIST_DATA[period] || [];
+                
+                groups.forEach(group => {
+                    // Renderizar Card
+                    let itemsHtml = group.items.map((item, index) => {
+                        const itemId = `${group.id}_${index}`;
+                        const checked = isItemChecked(group.id, index);
+                        return `
+                            <div class="flex items-start mb-2">
+                                <input id="${itemId}" type="checkbox" ${checked ? 'checked' : ''} 
+                                       class="mt-1 w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500" 
+                                       onclick="saveChecklistState('${group.id}', ${index}, this.checked)">
+                                <label for="${itemId}" class="ml-3 text-sm font-medium text-gray-700 select-none cursor-pointer">
+                                    ${item}
+                                </label>
+                            </div>
+                        `;
+                    }).join('');
+
+                    // Clase para el badge
+                    let badgeColor = 'bg-indigo-100 text-indigo-800';
+                    if (period === "0-6 meses") badgeColor = 'bg-green-100 text-green-800';
+                    else if (period === "6-12 meses") badgeColor = 'bg-yellow-100 text-yellow-800';
+                    else if (period === "12-18 meses") badgeColor = 'bg-blue-100 text-blue-800';
+                    else if (period === "18-36 meses") badgeColor = 'bg-red-100 text-red-800';
+
+
+                    container.innerHTML += `
+                        <div id="${group.id}" data-period="${period}" class="checklist-card bg-gray-50 p-6 rounded-xl shadow-lg border border-gray-200 transition duration-300">
+                            <div class="flex justify-between items-start mb-4">
+                                <h4 class="text-lg font-bold text-gray-800">${group.title}</h4>
+                                <span class="px-3 py-1 text-xs font-semibold rounded-full ${badgeColor}">${group.badge}</span>
+                            </div>
+                            
+                            <!-- Checkboxes -->
+                            <div class="space-y-2 mb-4">
+                                ${itemsHtml}
+                            </div>
+
+                            <!-- Barra de progreso -->
+                            <div class="pt-4 border-t border-gray-200">
+                                <div class="flex justify-between items-center text-sm font-semibold">
+                                    <p class="progress-text text-gray-700"></p>
+                                    <p class="text-indigo-600">${period}</p>
+                                </div>
+                                <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
+                                    <div class="progress-bar h-2 rounded-full bg-indigo-500 transition-all duration-500 ease-out" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            });
+
+            // Actualizar el progreso inicial de todas las cards después de que se hayan renderizado
+            periodsToShow.forEach(period => {
+                const groups = CHECKLIST_DATA[period] || [];
+                groups.forEach(group => updateProgress(group.id));
+            });
+        }
+
+
+        // --- ESTADO INICIAL DE LA APLICACIÓN Y LLAMADAS GLOBALES ---
+
         const initialState = {
             userName: "", 
             scores: radarAxes.reduce((acc, axis) => ({ ...acc, [axis]: 3 }), {}),
@@ -41,9 +226,9 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                 impacto: "",
                 admiracion: "",
                 lanzamiento: "",
-                stakeholders: "", // Anterior
-                creatividad: "", // Nuevo
-                gestionEquipo: "" // Nuevo
+                stakeholders: "",
+                creatividad: "",
+                gestionEquipo: ""
             },
         };
 
@@ -60,7 +245,12 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             
             renderUI();
             updateButtonState();
+            
+            // Inicializar el checklist al cargar (muestra el primer grupo o ninguno)
+            handleExperienceChange(document.getElementById('experience-selector').value);
         };
+
+        // El resto de funciones de cálculo, validación y exportación (drawRadarChart, exportPDF, etc.) se mantienen sin cambios mayores, solo la función renderUI que ahora llama a la lógica del checklist.
 
         // --- CALCULATION LOGIC ---
 
@@ -95,7 +285,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
         // --- FORM VALIDATION AND BUTTON STATE ---
 
         function checkFormCompletion() {
-            // Check if all reflection fields are non-empty (Ahora 6 campos)
+            // Check if all reflection fields are non-empty (6 campos)
             const reflections = assessmentData.reflections;
             return (
                 reflections.impacto && reflections.impacto.trim().length > 0 &&
@@ -110,6 +300,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
         function updateButtonState() {
             const isComplete = checkFormCompletion();
             const exportBtn = document.getElementById('export-pdf-btn');
+            const exportHint = document.getElementById('export-hint'); // Obtener el hint
             
             if (exportBtn) {
                 exportBtn.disabled = !isComplete;
@@ -121,10 +312,12 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                     // Estado Habilitado: Color del gráfico (#ff9e81)
                     exportBtn.classList.remove('bg-gray-400', 'hover:bg-gray-400');
                     exportBtn.classList.add('bg-chart-accent', 'hover:bg-chart-dark', 'focus:ring-chart-accent');
+                    if (exportHint) exportHint.style.display = 'none';
                 } else {
                     // Estado Deshabilitado: Color gris
                     exportBtn.classList.add('bg-gray-400');
                     exportBtn.classList.remove('bg-chart-accent', 'hover:bg-chart-dark', 'focus:ring-chart-accent');
+                    if (exportHint) exportHint.style.display = 'block'; // Mostrar hint
                 }
             }
         }
@@ -142,7 +335,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             }
         }
 
-        // --- UI RENDERING AND INPUT HANDLING ---
+        // --- UI RENDERING AND INPUT HANDLING (Cont.) ---
         
         function handleNameChange(value) {
             assessmentData.userName = value;
@@ -163,6 +356,8 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
         window.handleNameChange = handleNameChange;
         window.handleScoreChange = handleScoreChange;
         window.handleReflectionChange = handleReflectionChange;
+        window.handleExperienceChange = handleExperienceChange; // Nueva función global
+        window.saveChecklistState = saveChecklistState; // Nueva función global
         window.exportPDF = exportPDF;
 
 
@@ -225,7 +420,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             updateButtonState();
         }
 
-        // --- RADAR CHART DRAWING LOGIC (REWRITTEN FOR MARGINS) ---
+        // --- RADAR CHART DRAWING LOGIC ---
 
         function drawRadarChart(scores) {
             const canvas = document.getElementById('radar-chart');
@@ -245,7 +440,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             const center = availableSize / 2;
             const radius = effectiveSize / 2.5; // Radio ajustado basado en el tamaño efectivo
 
-            const numAxes = radarAxes.length;
+            const numAxes = radarAxes.length; // AHORA ES 6
             const angleStep = (2 * Math.PI) / numAxes;
             const maxScore = 5;
             const pointRadius = 5; 
@@ -262,7 +457,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                 };
             };
             
-            // --- 1. Draw Background Grid (Circles/Pentagons) ---
+            // --- 1. Draw Background Grid (Circles/Hexagons) ---
             
             for (let s = 1; s <= maxScore; s++) {
                 ctx.beginPath();
@@ -282,10 +477,10 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                 ctx.stroke();
             }
 
-            // --- 2. Draw Axes and Labels (NUEVA LÓGICA DE POSICIONAMIENTO) ---
+            // --- 2. Draw Axes and Labels ---
             
             ctx.fillStyle = '#4B5563';
-            ctx.font = '10px Inter, sans-serif'; // FUENTE REDUCIDA A 10PX
+            ctx.font = '10px Inter, sans-serif'; 
             ctx.textBaseline = 'middle';
 
             for (let i = 0; i < numAxes; i++) {
@@ -301,18 +496,20 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                 ctx.stroke();
 
                 // POSICIONAMIENTO SEGURO DEL TEXTO: 
-                const safeLabelRadius = radius * 1.09; // Ajustado a 1.09
-                const labelCoord = getCoord(angle, maxScore * 1.09); // Ajustado a 1.09
+                const safeLabelRadius = radius * 1.09; 
+                let labelCoord = getCoord(angle, maxScore * 1.09); 
                 
                 // Alineación del texto
                 let alignment = 'center';
                 let textX = labelCoord.x;
                 
-                if (angle > 0 && angle < Math.PI / 2) alignment = 'left';
-                else if (angle > Math.PI / 2 && angle < Math.PI) alignment = 'left'; 
-                else if (angle > Math.PI && angle < 3 * Math.PI / 2) alignment = 'right'; 
-                else if (angle > 3 * Math.PI / 2 && angle < 2 * Math.PI) alignment = 'right'; 
-                
+                // Ajustes de alineación más precisos para 6 ejes
+                const normalizedAngle = angle % (2 * Math.PI);
+                if (normalizedAngle < Math.PI / 6 || normalizedAngle >= 11 * Math.PI / 6) { alignment = 'center'; } // Top center (0)
+                else if (normalizedAngle > 0 && normalizedAngle <= 5 * Math.PI / 6) { alignment = 'left'; } // Right side (1, 2)
+                else if (normalizedAngle > 5 * Math.PI / 6 && normalizedAngle <= 7 * Math.PI / 6) { alignment = 'center'; } // Bottom center (3)
+                else { alignment = 'right'; } // Left side (4, 5)
+
                 // Ajustar posición X para compensar el ancho del texto
                 if (alignment === 'left') {
                     textX += 5; // Mover 5px a la derecha del punto
@@ -327,10 +524,9 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                 let lines = [];
 
                 if (i === 0) { // Visión de Producto y Ciclo de Vida
-                    // Aplicar el ajuste de radio específico a la posición superior
                     const specificLabelRadius = radius * 1.15; // Ajuste para el punto 0
-                    const specificLabelCoord = getCoord(angle, maxScore * 1.15);
-                    textX = specificLabelCoord.x;
+                    labelCoord = getCoord(angle, maxScore * 1.15);
+                    textX = labelCoord.x;
                     lines = ["Visión de Producto", "y Ciclo de Vida"];
                 } else if (i === 1) { // Conocimiento Técnico Aplicado
                     lines = ["Conocimiento", "Técnico", "Aplicado"];
@@ -340,6 +536,8 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                     lines = ["Liderazgo", "e influencia"];
                 } else if (i === 4) { // Estrategia, Datos y Negocio
                     lines = ["Estrategia,", "Datos y", "Negocio"];
+                } else if (i === 5) { // Mindset y Cultura de Producto
+                    lines = ["Mindset y", "Cultura de", "Producto"];
                 } else {
                     lines.push(label); // Fallback
                 }
@@ -384,10 +582,11 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             ctx.fill();
             ctx.stroke();
             
-            // --- 4. Draw Specific Connection Lines ---
+            // --- 4. Draw Specific Connection Lines (Hexágono) ---
 
+            // Conexiones secuenciales: [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]
             const connections = [
-                [0, 1], [0, 4], [4, 3], [3, 2], [2, 1]
+                [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]
             ];
 
             ctx.strokeStyle = redColor;
@@ -459,6 +658,11 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             const name = assessmentData.userName || '— Sin nombre —';
             const userId = 'PORTABLE_SESSION'; // Usar un ID genérico para la descarga sin Firebase
 
+            // --- Definición de Colores para el PDF (RGB) ---
+            const colorAccentRed = [255, 158, 129]; // #ff9e81 (para periodos incompletos)
+            const colorSuccessGreen = [34, 139, 34]; // Verde para éxito
+            const colorDefaultGray = [0, 0, 0]; // Negro para texto normal
+
             // ------------------------------------
             // 1. Encabezado General (Título y Nombre)
             // ------------------------------------
@@ -477,6 +681,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             // 1. Gráfico (Canvas como Imagen) - PRIMERA PÁGINA
             // ------------------------------------
             doc.setFontSize(16);
+            doc.setTextColor(colorDefaultGray[0], colorDefaultGray[1], colorDefaultGray[2]);
             doc.text("Punto 1: Gráfico de Competencias", margin, y);
             y += 5;
 
@@ -499,6 +704,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             // Media (Negrita)
             doc.setFontSize(14);
             doc.setFont("helvetica", "bold");
+            doc.setTextColor(colorDefaultGray[0], colorDefaultGray[1], colorDefaultGray[2]);
             doc.text(`Media de tus respuestas: ${average}`, (210 - margin), y, null, null, 'right');
             y += 5;
 
@@ -531,7 +737,8 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             ];
 
             doc.setFontSize(12);
-            
+            doc.setTextColor(colorDefaultGray[0], colorDefaultGray[1], colorDefaultGray[2]);
+
             reflections.forEach((item, i) => {
                 const answer = assessmentData.reflections[item.key] || '— Sin respuesta —';
                 
@@ -570,6 +777,94 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                     y += 7; // Espacio después de la línea
                 }
             });
+            
+            // ------------------------------------
+            // 4. Checklist de Habilidades (Punto 3) - TERCERA PÁGINA (o Continuación)
+            // ------------------------------------
+            
+            // Comprobar si hay espacio o añadir nueva página
+            if (y > 250) { 
+                doc.addPage(); 
+                y = 15; 
+            } else {
+                y += 10;
+            }
+            
+            doc.setFontSize(18);
+            doc.setFont("helvetica", "bold");
+            doc.text("3. Checklist habilidades vs experiencia", pageCenter, y, { align: 'center' });
+            y += 10;
+            
+            doc.setFontSize(12);
+            
+            const periods = Object.keys(CHECKLIST_DATA);
+            let hasContent = false;
+            
+            // Recorrer todos los periodos y grupos
+            periods.forEach(period => {
+                const groups = CHECKLIST_DATA[period] || [];
+                
+                groups.forEach(group => {
+                    const groupId = group.id;
+                    const totalItems = group.items.length;
+                    
+                    // Calcular ítems completados leyendo el localStorage
+                    const completedItems = group.items.filter((_, index) => isItemChecked(groupId, index)).length;
+
+                    // Filtrar: Solo incluir si X > 0
+                    if (completedItems > 0) {
+                        hasContent = true;
+                        
+                        // Determinar colores
+                        const isCompleted = completedItems === totalItems;
+                        const currentColor = isCompleted ? colorSuccessGreen : colorDefaultGray;
+                        const periodColor = isCompleted ? colorSuccessGreen : colorAccentRed;
+                        
+                        // Si necesitamos una nueva página
+                        if (y > 270) { 
+                            doc.addPage(); 
+                            y = 15; 
+                        }
+                        
+                        // Título de la Card (Con viñeta y color condicional)
+                        doc.setFontSize(14); // Un poco más grande para el título de la card
+                        doc.setFont("helvetica", "bold");
+                        doc.setTextColor(currentColor[0], currentColor[1], currentColor[2]);
+                        doc.text(`\u2022 ${group.title}`, margin, y); 
+                        y += 6; 
+
+                        // Periodo de Experiencia (Color condicional)
+                        doc.setFontSize(10);
+                        doc.setFont("helvetica", "normal");
+                        doc.setTextColor(periodColor[0], periodColor[1], periodColor[2]);
+                        doc.text(`[Periodo: ${period}]`, margin + 5, y);
+                        y += 5;
+                        
+                        // Progreso (Color condicional)
+                        doc.setFontSize(12);
+                        doc.setFont("helvetica", "bold");
+                        doc.setTextColor(currentColor[0], currentColor[1], currentColor[2]);
+                        doc.text(`Progreso: ${completedItems} de ${totalItems} completados`, margin + 5, y);
+                        y += 8; // Espacio entre cards
+                        
+                        // Restore default black text color
+                        doc.setTextColor(colorDefaultGray[0], colorDefaultGray[1], colorDefaultGray[2]);
+                        
+                        // Línea divisoria suave
+                        doc.setDrawColor(230, 230, 230); // Color muy claro
+                        doc.line(margin, y, (210 - margin), y); 
+                        y += 5; 
+                    }
+                });
+            });
+            
+            // Si no se marcó nada, añadir una nota
+            if (!hasContent) {
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "italic");
+                doc.text("No se marcaron habilidades en el checklist (Punto 3).", pageCenter, y + 20, { align: 'center' });
+            }
+
 
             // Guardar el PDF
             doc.save(`Autodiagnostico_PM_${name || 'report'}.pdf`);
@@ -660,11 +955,41 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             </div>
         </section>
         
-        <!-- Botón de Exportación a PDF (Posición final debajo de la Sección 2) -->
-        <div class="max-w-7xl mx-auto px-4 pb-4 flex justify-center">
+        <!-- NUEVA SECTION 3: CHECKLIST HABILIDADES VS EXPERIENCIA --><section class="bg-white p-6 rounded-xl shadow-2xl border border-indigo-100 mt-8">
+            <h2 class="text-2xl font-bold text-indigo-800 mb-6 border-b pb-2">3. Checklist habilidades vs experiencia</h2>
+            
+            <!-- 3.1 Selector de Experiencia -->
+            <div class="mb-8 p-4 bg-indigo-50 rounded-lg border border-indigo-200 shadow-inner flex flex-col md:flex-row justify-between items-center">
+                <label for="experience-selector" class="text-lg font-semibold text-indigo-800 mb-2 md:mb-0">
+                    Evalúa tu nivel según tu experiencia:
+                </label>
+                <select id="experience-selector" 
+                        class="p-2 border border-indigo-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 w-full md:w-auto"
+                        onchange="handleExperienceChange(this.value)">
+                    <option value="0-6 meses">0-6 meses</option>
+                    <option value="6-12 meses">6-12 meses</option>
+                    <option value="12-18 meses">12-18 meses</option>
+                    <option value="18-36 meses">18-36 meses</option>
+                    <option value="Más de 36 meses">Más de 36 meses</option>
+                </select>
+            </div>
+
+            <!-- 3.2 Contenedor de Checklists (Grid) -->
+            <div id="checklist-container" 
+                 class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 transition duration-500 ease-out opacity-0 scale-95"
+                 aria-live="polite">
+                <!-- Cards se renderizarán aquí -->
+            </div>
+        </section>
+        
+        <!-- Botón de Exportación a PDF (Posición final debajo de la Sección 3) -->
+        <div class="px-4 pb-4 flex justify-center flex-col items-center">
             <!-- El botón es inicialmente deshabilitado por el script --><button id="export-pdf-btn" onclick="checkFormCompletion() ? exportPDF() : showSnackbar('Completa las respuestas para poder exportarlo');" class="bg-gray-400 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-pink-400 focus:ring-opacity-50" disabled>
                 Exportar a PDF
             </button>
+            <!-- Hint para el usuario --><p id="export-hint" class="text-xs text-gray-400 mt-2 text-center" style="display: none;">
+                (Para poder exportar a PDF rellena todas las preguntas de la Parte 2)
+            </p>
         </div>
 
     </main>
