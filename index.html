@@ -1,3 +1,11 @@
+<!-- Chosen Palette: Indigo (Main), Gray (Background), Pink (Accent/Buttons), Reddish-Orange (Chart) -->
+<!-- Application Structure Plan: Dashboard (Dos Columnas). Columna 1 (Izquierda, 2/3): Visualización del informe (Gráfico Radar, Media). Columna 2 (Derecha, 1/3): Interacción/Input (Sliders de puntuación y Textos de Reflexión). Esta estructura es óptima porque separa la entrada de datos del resultado del informe, permitiendo al usuario ver el impacto de sus respuestas en tiempo real. La navegación es intuitiva y lineal (rellenar de arriba abajo, visualizar a la izquierda). -->
+<!-- Visualization & Content Choices: 
+1. Puntuaciones -> Goal: Comparar fortalezas/debilidades -> Viz: Gráfico de Radar (Canvas, dibujo manual) -> Interaction: Sliders de puntuación (input range) que actualizan el gráfico en tiempo real -> Justification: El Radar Chart es el mejor método para visualizar un perfil de competencias multifactorial de forma sintetizada. 
+2. Media Aritmética -> Goal: Informar del rendimiento general -> Viz: Métrica de texto dinámica (HTML) -> Interaction: Actualización automática al mover sliders -> Justification: Da un valor único y rápido de la evaluación.
+3. Reflexiones -> Goal: Capturar insights cualitativos -> Viz: Textareas (HTML) -> Interaction: Entrada de texto que valida el formulario para la exportación -> Justification: Captura datos narrativos esenciales para el informe. 
+4. Exportar -> Goal: Documentar y compartir -> Viz: Botón (HTML) -> Interaction: Generación de PDF (jsPDF) -> Justification: Convierte el SPA en un informe formal.
+CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -7,22 +15,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Librería para generar PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script type="module">
-        // Importaciones de Firebase (necesarias para la persistencia, aunque se elimina la IA)
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <script>
         
-        // Configuraciones globales
-        setLogLevel('debug'); // Habilitar logs para depuración de Firestore
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-pm-app';
-
-        let db, auth, userId = null;
-        let isAuthReady = false;
-
         // Ejes del gráfico de radar
         const radarAxes = [
             "Visión de Producto y Ciclo de Vida (1A)",
@@ -32,9 +26,9 @@
             "Estrategia, Datos y Negocio (3B/4)"
         ];
 
-        // Estado inicial de la evaluación
+        // Estado inicial de la evaluación (Datos en memoria)
         const initialState = {
-            userName: "", // Nuevo campo para el nombre
+            userName: "", 
             scores: radarAxes.reduce((acc, axis) => ({ ...acc, [axis]: 3 }), {}),
             reflections: {
                 impacto: "",
@@ -45,92 +39,14 @@
 
         let assessmentData = { ...initialState };
 
-        // --- FIREBASE INITIALIZATION AND AUTH ---
-
         window.onload = function() {
-            try {
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                    } else {
-                        // Sign in anonymously if no token is available or previous auth failed
-                        try {
-                            if (initialAuthToken) {
-                                await signInWithCustomToken(auth, initialAuthToken);
-                                userId = auth.currentUser.uid;
-                            } else {
-                                await signInAnonymously(auth);
-                                userId = auth.currentUser.uid;
-                            }
-                        } catch (error) {
-                            console.error("Error during anonymous sign-in or custom token sign-in:", error);
-                            // Fallback to a random ID if auth fails completely
-                            userId = `anonymous-${crypto.randomUUID()}`;
-                        }
-                    }
-                    isAuthReady = true;
-                    console.log("Firebase Auth Ready. User ID:", userId);
-                    document.getElementById('user-id-display').textContent = `ID de Usuario: ${userId}`;
-                    setupListeners();
-                });
-
-            } catch (error) {
-                console.error("Error initializing Firebase:", error);
-                document.getElementById('loading-status').textContent = 'Error al inicializar la base de datos.';
-            }
+            // Inicialización de la aplicación sin Firebase para uso estático/online.
+            document.getElementById('loading-status').classList.add('hidden'); 
+            document.getElementById('user-id-display').classList.add('hidden'); 
+            document.getElementById('save-status').classList.add('hidden'); 
+            renderUI();
+            updateButtonState();
         };
-
-        // --- FIRESTORE DATA HANDLING ---
-
-        function getDocRef() {
-            if (!userId) return null;
-            // Private path: /artifacts/{appId}/users/{userId}/pm_self_assessment/data
-            return doc(db, `artifacts/${appId}/users/${userId}/pm_self_assessment`, 'data');
-        }
-
-        function setupListeners() {
-            const docRef = getDocRef();
-            if (docRef) {
-                // Listen for real-time changes
-                onSnapshot(docRef, (doc) => {
-                    if (doc.exists()) {
-                        const data = doc.data();
-                        // Fusionar datos existentes con el estado inicial para asegurar que todos los campos existen
-                        assessmentData = { ...initialState, ...data };
-                        console.log("Data loaded from Firestore:", assessmentData);
-                    } else {
-                        console.log("No existing data found for user. Initializing...");
-                    }
-                    document.getElementById('loading-status').classList.add('hidden');
-                    renderUI();
-                    updateButtonState(); // Initial check for button state
-                }, (error) => {
-                    console.error("Error listening to document:", error);
-                    document.getElementById('loading-status').textContent = 'Error al cargar datos.';
-                });
-            }
-        }
-
-        async function saveData() {
-            if (!db || !isAuthReady) {
-                console.warn("Database or Auth not ready. Cannot save.");
-                return;
-            }
-            try {
-                const docRef = getDocRef();
-                await setDoc(docRef, assessmentData, { merge: true });
-                console.log("Data saved successfully.");
-                document.getElementById('save-status').textContent = 'Guardado automáticamente.';
-                setTimeout(() => document.getElementById('save-status').textContent = '', 2000);
-            } catch (error) {
-                console.error("Error saving data:", error);
-                document.getElementById('save-status').textContent = 'Error al guardar.';
-            }
-        }
 
         // --- CALCULATION LOGIC ---
 
@@ -186,17 +102,16 @@
         
         function handleNameChange(value) {
             assessmentData.userName = value;
-            saveData();
+            // No saving to DB, just updating UI/state
         }
 
         function handleScoreChange(axis, value) {
             assessmentData.scores[axis] = parseInt(value, 10);
-            saveData();
+            renderUI(); // Redraw chart
         }
 
         function handleReflectionChange(key, value) {
             assessmentData.reflections[key] = value;
-            saveData();
             updateButtonState(); // Update button state after reflection change
         }
 
@@ -205,11 +120,12 @@
         window.handleScoreChange = handleScoreChange;
         window.handleReflectionChange = handleReflectionChange;
         window.exportPDF = exportPDF;
-        window.updateButtonState = updateButtonState; // expose for initial call
 
 
         function renderUI() {
             const formContainer = document.getElementById('assessment-form');
+            if (!formContainer) return;
+            
             formContainer.innerHTML = '';
             
             // Set Name input value
@@ -265,7 +181,7 @@
 
         function drawRadarChart(scores) {
             const canvas = document.getElementById('radar-chart');
-            if (!canvas.getContext) return;
+            if (!canvas || !canvas.getContext) return;
 
             const ctx = canvas.getContext('2d');
             
@@ -419,6 +335,7 @@
             let y = 15; // Posición Y inicial
             
             const name = assessmentData.userName || '— Sin nombre —';
+            const userId = 'PORTABLE_SESSION'; // Usar un ID genérico para la descarga sin Firebase
 
             // ------------------------------------
             // 1. Encabezado General (Título y Nombre)
@@ -521,14 +438,12 @@
             });
 
             // Guardar el PDF
-            doc.save(`Autodiagnostico_PM_${userId}.pdf`);
+            doc.save(`Autodiagnostico_PM_${name || 'report'}.pdf`);
         }
         
         // Ensure chart redraws on window resize
         window.addEventListener('resize', () => {
-            if (isAuthReady) {
-                drawRadarChart(assessmentData.scores);
-            }
+            drawRadarChart(assessmentData.scores);
         });
         
     </script>
@@ -567,8 +482,8 @@
                         oninput="handleNameChange(this.value);"
                     />
                 </div>
-                <!-- ID de Usuario -->
-                <div class="text-xs sm:text-sm opacity-80" id="user-id-display">Cargando ID...</div>
+                <!-- ID de Usuario - Oculto al no usar Firebase -->
+                <div class="text-xs sm:text-sm opacity-80 hidden" id="user-id-display"></div>
             </div>
         </div>
     </header>
@@ -579,7 +494,7 @@
         <!-- VISUALIZATION PANEL (2/3 width on large screens) -->
         <section class="lg:col-span-2 bg-white p-6 rounded-xl shadow-2xl border border-indigo-100 h-fit sticky top-[68px]">
             <h2 class="text-2xl font-bold text-indigo-800 mb-4">Gráfico de Competencias (Radar Chart)</h2>
-            <div id="loading-status" class="text-center py-8 text-indigo-500 font-semibold">Cargando datos y autenticando...</div>
+            <div id="loading-status" class="text-center py-8 text-indigo-500 font-semibold hidden"></div>
             <div class="flex justify-center items-center p-4">
                 <canvas id="radar-chart" class="w-full max-w-lg"></canvas>
             </div>
@@ -589,7 +504,8 @@
                 <div id="average-display" class="mt-4 text-center lg:text-right">
                     <!-- Contenido de la media se renderiza aquí -->
                 </div>
-                <div id="save-status" class="mt-2 text-sm text-green-600 font-medium text-center lg:text-right"></div>
+                <!-- Estado de guardado - Oculto al no usar Firebase -->
+                <div id="save-status" class="mt-2 text-sm text-green-600 font-medium text-center lg:text-right hidden"></div>
             </div>
         </section>
 
@@ -605,7 +521,7 @@
     <!-- Botón de Exportación a PDF (No fijo, al final de main) -->
     <div class="max-w-7xl mx-auto px-4 pb-8 flex justify-center">
         <!-- El botón es inicialmente deshabilitado por el script -->
-        <button id="export-pdf-btn" onclick="exportPDF();" class="bg-gray-400 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-pink-400 focus:ring-opacity-50" disabled>
+        <button id="export-pdf-btn" onclick="checkFormCompletion() ? exportPDF() : showSnackbar('Rellena el test de autoevaluación primero');" class="bg-gray-400 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-pink-400 focus:ring-opacity-50" disabled>
             Exportar a PDF
         </button>
     </div>
@@ -629,4 +545,3 @@
 
 </body>
 </html>
-
