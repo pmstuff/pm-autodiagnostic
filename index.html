@@ -16,6 +16,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
     <title>Autodiagnóstico PM (Gráfico Radar)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Librería para generar PDF --><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Librería Chart.js --><script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         /* Definición de colores custom para el botón, basados en el color del gráfico */
         .bg-chart-accent { background-color: #ff9e81; }
@@ -107,6 +108,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
         // --- ESTADO Y PERSISTENCIA DEL CHECKLIST ---
         
         let checklistState = JSON.parse(localStorage.getItem('pmChecklistState')) || {};
+        let experienceChartInstance = null; // Instancia global para Chart.js
 
         function saveChecklistState(groupId, itemId, isChecked) {
             if (!checklistState[groupId]) {
@@ -115,6 +117,10 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             checklistState[groupId][itemId] = isChecked;
             localStorage.setItem('pmChecklistState', JSON.stringify(checklistState));
             updateProgress(groupId);
+            
+            // CRÍTICO: Llamar a la actualización de estadísticas aquí
+            const selector = document.getElementById('experience-selector');
+            if (selector) updateStatsUI(selector.value);
         }
 
         function isItemChecked(groupId, itemId) {
@@ -136,7 +142,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             const progressText = card.querySelector('.progress-text');
             const progressBar = card.querySelector('.progress-bar');
             
-            if (progressText) progressText.textContent = `${completed}/${total} completados`;
+            if (progressText) progressText.textContent = `${completed}/${total} adquiridos`; // CAMBIO A "ADQUIRIDOS"
             if (progressBar) progressBar.style.width = `${percentage}%`;
         }
 
@@ -214,6 +220,137 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                 const groups = CHECKLIST_DATA[period] || [];
                 groups.forEach(group => updateProgress(group.id));
             });
+            
+            // CRÍTICO: Actualizar estadísticas y gráfico
+            updateStatsUI(selectedValue);
+        }
+
+        // --- LÓGICA DE ESTADÍSTICAS Y GRÁFICOS (PUNTO 4) ---
+
+        function calculateChecklistStats(currentExperience) {
+            let totalItems = 0;
+            let completedItems = 0;
+            let chartLabels = [];
+            let chartPercentages = [];
+
+            const periods = EXPERIENCE_MAP[currentExperience] || [];
+
+            periods.forEach(period => {
+                const groups = CHECKLIST_DATA[period] || [];
+                groups.forEach(group => {
+                    const total = group.items.length;
+                    const completed = group.items.filter((_, index) => isItemChecked(group.id, index)).length;
+                    const percentage = total > 0 ? (completed / total) * 100 : 0;
+
+                    // Collect data for summary
+                    totalItems += total;
+                    completedItems += completed;
+
+                    // Collect data for chart
+                    // Usar solo el subtítulo (e.g., "Conceptos Básicos") y el período para etiquetas más cortas
+                    const titleParts = group.title.split('-').map(p => p.trim());
+                    const shortTitle = titleParts.length > 1 ? titleParts[1] : titleParts[0];
+                    chartLabels.push(`${shortTitle} (${period})`);
+                    chartPercentages.push(parseFloat(percentage.toFixed(1)));
+                });
+            });
+
+            const percentageComplete = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
+
+            return {
+                totalItems,
+                completedItems,
+                uncompletedItems: totalItems - completedItems,
+                percentageComplete: percentageComplete.toFixed(1),
+                chartLabels,
+                chartPercentages
+            };
+        }
+        
+        function updateStatsUI(currentExperience) {
+            const totalElement = document.getElementById('stat-total');
+            const completedElement = document.getElementById('stat-completed');
+            const uncompletedElement = document.getElementById('stat-uncompleted');
+            const percentElement = document.getElementById('stat-percent');
+            
+            const stats = calculateChecklistStats(currentExperience);
+
+            if (totalElement) totalElement.textContent = stats.totalItems;
+            if (completedElement) completedElement.textContent = stats.completedItems;
+            if (uncompletedElement) uncompletedElement.textContent = stats.uncompletedItems;
+            if (percentElement) percentElement.textContent = `${stats.percentageComplete}%`;
+
+            renderExperienceChart(stats);
+        }
+        
+        function renderExperienceChart(stats) {
+            const ctx = document.getElementById('experience-chart');
+            if (!ctx) return;
+
+            // Destruir instancia anterior si existe
+            if (experienceChartInstance) {
+                experienceChartInstance.destroy();
+            }
+            
+            experienceChartInstance = new Chart(ctx, {
+                type: 'line', // Tipo de línea con fill para área
+                data: {
+                    labels: stats.chartLabels,
+                    datasets: [{
+                        label: '% de Habilidades Adquiridas por Grupo', // CAMBIO EN LABEL
+                        data: stats.chartPercentages,
+                        backgroundColor: 'rgba(99, 102, 241, 0.4)', // Color de área (Indigo)
+                        borderColor: '#4F46E5', // Color de línea
+                        borderWidth: 2,
+                        fill: true, // Habilitar el área
+                        tension: 0.3, // Suavizar la línea
+                        pointRadius: 4,
+                        pointBackgroundColor: '#4F46E5',
+                        pointHoverRadius: 6,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: '% Adquirido', // CAMBIO EN LABEL
+                                color: '#4B5563'
+                            },
+                            ticks: {
+                                callback: function(value) { return value + "%" }
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Grupo de Habilidades (Periodo de Experiencia)',
+                                color: '#4B5563'
+                            },
+                            // Evitar que las etiquetas se corten
+                            ticks: {
+                                maxRotation: 45, 
+                                minRotation: 45,
+                                font: { size: 10 }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.raw}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
 
 
@@ -234,26 +371,25 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
 
         let assessmentData = { ...initialState };
 
-        window.onload = function() {
-            // Inicialización de la aplicación sin Firebase para uso estático/online.
-            
-            const userIdDisplay = document.getElementById('user-id-display');
-            if (userIdDisplay) userIdDisplay.classList.add('hidden');
-            
-            const saveStatus = document.getElementById('save-status');
-            if (saveStatus) saveStatus.classList.add('hidden');
-            
-            renderUI();
-            updateButtonState();
-            
-            // Inicializar el checklist al cargar (muestra el primer grupo o ninguno)
-            handleExperienceChange(document.getElementById('experience-selector').value);
-        };
+        // --- MANEJO DE INPUTS Y HANDLERS ---
+        
+        function handleNameChange(value) {
+            assessmentData.userName = value;
+            // No saving to DB, just updating UI/state
+        }
 
-        // El resto de funciones de cálculo, validación y exportación (drawRadarChart, exportPDF, etc.) se mantienen sin cambios mayores, solo la función renderUI que ahora llama a la lógica del checklist.
+        function handleScoreChange(axis, value) {
+            assessmentData.scores[axis] = parseInt(value, 10);
+            renderUI(); // Redraw chart
+        }
 
-        // --- CALCULATION LOGIC ---
-
+        function handleReflectionChange(key, value) {
+            assessmentData.reflections[key] = value;
+            updateButtonState(); // Update button state after reflection change
+        }
+        
+        // --- CÁLCULO DE MEDIA Y MENSAJES ---
+        
         function calculateAverageScore() {
             const scores = Object.values(assessmentData.scores);
             if (scores.length === 0) return '0.00';
@@ -281,9 +417,9 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             }
             return `¡${message}!`; // Añadir exclamaciones si es un resultado real
         }
-
-        // --- FORM VALIDATION AND BUTTON STATE ---
-
+        
+        // --- VALIDACIÓN Y BOTONES ---
+        
         function checkFormCompletion() {
             // Check if all reflection fields are non-empty (6 campos)
             const reflections = assessmentData.reflections;
@@ -300,7 +436,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
         function updateButtonState() {
             const isComplete = checkFormCompletion();
             const exportBtn = document.getElementById('export-pdf-btn');
-            const exportHint = document.getElementById('export-hint'); // Obtener el hint
+            const exportHint = document.getElementById('export-hint'); 
             
             if (exportBtn) {
                 exportBtn.disabled = !isComplete;
@@ -335,37 +471,13 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             }
         }
 
-        // --- UI RENDERING AND INPUT HANDLING (Cont.) ---
+
+        // --- FUNCIONES CRÍTICAS DE RENDERIZADO ---
         
-        function handleNameChange(value) {
-            assessmentData.userName = value;
-            // No saving to DB, just updating UI/state
-        }
-
-        function handleScoreChange(axis, value) {
-            assessmentData.scores[axis] = parseInt(value, 10);
-            renderUI(); // Redraw chart
-        }
-
-        function handleReflectionChange(key, value) {
-            assessmentData.reflections[key] = value;
-            updateButtonState(); // Update button state after reflection change
-        }
-
-        // Exponer funciones globalmente para su uso en controladores de eventos HTML en línea
-        window.handleNameChange = handleNameChange;
-        window.handleScoreChange = handleScoreChange;
-        window.handleReflectionChange = handleReflectionChange;
-        window.handleExperienceChange = handleExperienceChange; // Nueva función global
-        window.saveChecklistState = saveChecklistState; // Nueva función global
-        window.exportPDF = exportPDF;
-
-
         function renderUI() {
             const scoresContainer = document.getElementById('scores-container');
             const reflectionsContainer = document.getElementById('reflections-container');
             
-            // CRÍTICO: El error puede ocurrir aquí si los contenedores aún no están cargados.
             if (!scoresContainer || !reflectionsContainer) return;
             
             scoresContainer.innerHTML = '';
@@ -420,7 +532,6 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             updateButtonState();
         }
 
-        // --- RADAR CHART DRAWING LOGIC ---
 
         function drawRadarChart(scores) {
             const canvas = document.getElementById('radar-chart');
@@ -496,8 +607,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                 ctx.stroke();
 
                 // POSICIONAMIENTO SEGURO DEL TEXTO: 
-                const safeLabelRadius = radius * 1.09; 
-                let labelCoord = getCoord(angle, maxScore * 1.09); 
+                let labelCoord = getCoord(angle, maxScore * 1.15); 
                 
                 // Alineación del texto
                 let alignment = 'center';
@@ -522,21 +632,35 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                 // Lógica de salto de línea (Con los saltos forzados)
                 let label = radarAxes[i].split('(')[0].trim();
                 let lines = [];
+                
+                
+                // --- Ajustes Específicos para cada etiqueta ---
+                // Nota: Usamos 1.09 para acercar las etiquetas (último ajuste viable)
+                const baseRadiusMultiplier = 1.09;
 
-                if (i === 0) { // Visión de Producto y Ciclo de Vida
-                    const specificLabelRadius = radius * 1.15; // Ajuste para el punto 0
-                    labelCoord = getCoord(angle, maxScore * 1.15);
+                if (i === 0) { // Visión de Producto y Ciclo de Vida (Arriba)
+                    labelCoord = getCoord(angle, maxScore * 1.15); // Un poco más de margen arriba
                     textX = labelCoord.x;
                     lines = ["Visión de Producto", "y Ciclo de Vida"];
                 } else if (i === 1) { // Conocimiento Técnico Aplicado
+                    labelCoord = getCoord(angle, maxScore * baseRadiusMultiplier);
+                    textX = labelCoord.x;
                     lines = ["Conocimiento", "Técnico", "Aplicado"];
                 } else if (i === 2) { // Habilidad de comunicación
+                    labelCoord = getCoord(angle, maxScore * baseRadiusMultiplier);
+                    textX = labelCoord.x;
                     lines = ["Habilidad", "de", "comunicación"];
                 } else if (i === 3) { // Liderazgo e influencia
+                    labelCoord = getCoord(angle, maxScore * baseRadiusMultiplier);
+                    textX = labelCoord.x;
                     lines = ["Liderazgo", "e influencia"];
                 } else if (i === 4) { // Estrategia, Datos y Negocio
+                    labelCoord = getCoord(angle, maxScore * baseRadiusMultiplier);
+                    textX = labelCoord.x;
                     lines = ["Estrategia,", "Datos y", "Negocio"];
                 } else if (i === 5) { // Mindset y Cultura de Producto
+                    labelCoord = getCoord(angle, maxScore * baseRadiusMultiplier);
+                    textX = labelCoord.x;
                     lines = ["Mindset y", "Cultura de", "Producto"];
                 } else {
                     lines.push(label); // Fallback
@@ -716,7 +840,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             y += 10; // Espacio después de la escala
             
             // ------------------------------------
-            // 3. Reflexiones (Punto 2) - SEGUNDA PÁGINA
+            // 2. Checklist de Habilidades (Punto 2) - SEGUNDA PÁGINA
             // ------------------------------------
             
             doc.addPage(); // Salto de página
@@ -724,7 +848,89 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             
             doc.setFontSize(18);
             doc.setFont("helvetica", "bold");
-            doc.text("2. Reflexión sobre Casos Prácticos", pageCenter, y, { align: 'center' });
+            doc.text("2. Checklist habilidades vs experiencia", pageCenter, y, { align: 'center' });
+            y += 10;
+            
+            doc.setFontSize(12);
+            
+            const periods = Object.keys(CHECKLIST_DATA);
+            let hasChecklistContent = false;
+            
+            // Recorrer todos los periodos y grupos
+            periods.forEach(period => {
+                const groups = CHECKLIST_DATA[period] || [];
+                
+                groups.forEach(group => {
+                    const groupId = group.id;
+                    const totalItems = group.items.length;
+                    
+                    // Calcular ítems completados leyendo el localStorage
+                    const completedItems = group.items.filter((_, index) => isItemChecked(groupId, index)).length;
+
+                    // Filtrar: Solo incluir si X > 0
+                    if (completedItems > 0) {
+                        hasChecklistContent = true;
+                        
+                        // Determinar colores
+                        const isCompleted = completedItems === totalItems;
+                        const currentColor = isCompleted ? colorSuccessGreen : colorDefaultGray;
+                        const periodColor = isCompleted ? colorSuccessGreen : colorAccentRed;
+                        
+                        // Si necesitamos una nueva página
+                        if (y > 270) { 
+                            doc.addPage(); 
+                            y = 15; 
+                        }
+                        
+                        // Título de la Card (Con viñeta y color condicional)
+                        doc.setFontSize(14); // Un poco más grande para el título de la card
+                        doc.setFont("helvetica", "bold");
+                        doc.setTextColor(currentColor[0], currentColor[1], currentColor[2]);
+                        doc.text(`\u2022 ${group.title}`, margin, y); 
+                        y += 6; 
+
+                        // Periodo de Experiencia (Color condicional)
+                        doc.setFontSize(10);
+                        doc.setFont("helvetica", "normal");
+                        doc.setTextColor(periodColor[0], periodColor[1], periodColor[2]);
+                        doc.text(`[Periodo: ${period}]`, margin + 5, y);
+                        y += 5;
+                        
+                        // Progreso (Color condicional)
+                        doc.setFontSize(12);
+                        doc.setFont("helvetica", "bold");
+                        doc.setTextColor(currentColor[0], currentColor[1], currentColor[2]);
+                        doc.text(`Progreso: ${completedItems} de ${totalItems} adquiridos`, margin + 5, y); // CAMBIO EN PDF
+                        y += 8; // Espacio entre cards
+                        
+                        // Restore default black text color
+                        doc.setTextColor(colorDefaultGray[0], colorDefaultGray[1], colorDefaultGray[2]);
+                        
+                        // Línea divisoria suave
+                        doc.setDrawColor(230, 230, 230); // Color muy claro
+                        doc.line(margin, y, (210 - margin), y); 
+                        y += 5; 
+                    }
+                });
+            });
+            
+            // Si no se marcó nada, añadir una nota
+            if (!hasChecklistContent) {
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "italic");
+                doc.text("No se marcaron habilidades en el checklist (Punto 2).", pageCenter, y + 20, { align: 'center' });
+            }
+
+            // ------------------------------------
+            // 3. Reflexiones (Punto 3) - NUEVA PÁGINA
+            // ------------------------------------
+            
+            doc.addPage(); // Salto de página
+            y = 15; // Resetear Y para la nueva página
+            
+            doc.setFontSize(18);
+            doc.setFont("helvetica", "bold");
+            doc.text("3. Reflexión sobre Casos Prácticos", pageCenter, y, { align: 'center' });
             y += 10;
             
             const reflections = [
@@ -779,92 +985,46 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             });
             
             // ------------------------------------
-            // 4. Checklist de Habilidades (Punto 3) - TERCERA PÁGINA (o Continuación)
+            // 4. Gráfico de Experiencia (Punto 4) - ÚLTIMA SECCIÓN
             // ------------------------------------
-            
+
             // Comprobar si hay espacio o añadir nueva página
-            if (y > 250) { 
-                doc.addPage(); 
-                y = 15; 
+            if (y > 240) { 
+                doc.addPage();
+                y = 15;
             } else {
                 y += 10;
             }
-            
+
             doc.setFontSize(18);
             doc.setFont("helvetica", "bold");
-            doc.text("3. Checklist habilidades vs experiencia", pageCenter, y, { align: 'center' });
+            doc.setTextColor(colorDefaultGray[0], colorDefaultGray[1], colorDefaultGray[2]);
+            doc.text("4. Resumen Gráfico de Experiencia", pageCenter, y, { align: 'center' });
             y += 10;
-            
-            doc.setFontSize(12);
-            
-            const periods = Object.keys(CHECKLIST_DATA);
-            let hasContent = false;
-            
-            // Recorrer todos los periodos y grupos
-            periods.forEach(period => {
-                const groups = CHECKLIST_DATA[period] || [];
+
+            const experienceCanvas = document.getElementById('experience-chart');
+            if (experienceCanvas) {
+                const experienceImgData = experienceCanvas.toDataURL('image/png');
                 
-                groups.forEach(group => {
-                    const groupId = group.id;
-                    const totalItems = group.items.length;
-                    
-                    // Calcular ítems completados leyendo el localStorage
-                    const completedItems = group.items.filter((_, index) => isItemChecked(groupId, index)).length;
+                // Dimensiones para que quepa bien en A4
+                const imgWidth = contentWidth;
+                const imgHeight = (experienceCanvas.height * imgWidth) / experienceCanvas.width;
 
-                    // Filtrar: Solo incluir si X > 0
-                    if (completedItems > 0) {
-                        hasContent = true;
-                        
-                        // Determinar colores
-                        const isCompleted = completedItems === totalItems;
-                        const currentColor = isCompleted ? colorSuccessGreen : colorDefaultGray;
-                        const periodColor = isCompleted ? colorSuccessGreen : colorAccentRed;
-                        
-                        // Si necesitamos una nueva página
-                        if (y > 270) { 
-                            doc.addPage(); 
-                            y = 15; 
-                        }
-                        
-                        // Título de la Card (Con viñeta y color condicional)
-                        doc.setFontSize(14); // Un poco más grande para el título de la card
-                        doc.setFont("helvetica", "bold");
-                        doc.setTextColor(currentColor[0], currentColor[1], currentColor[2]);
-                        doc.text(`\u2022 ${group.title}`, margin, y); 
-                        y += 6; 
-
-                        // Periodo de Experiencia (Color condicional)
-                        doc.setFontSize(10);
-                        doc.setFont("helvetica", "normal");
-                        doc.setTextColor(periodColor[0], periodColor[1], periodColor[2]);
-                        doc.text(`[Periodo: ${period}]`, margin + 5, y);
-                        y += 5;
-                        
-                        // Progreso (Color condicional)
-                        doc.setFontSize(12);
-                        doc.setFont("helvetica", "bold");
-                        doc.setTextColor(currentColor[0], currentColor[1], currentColor[2]);
-                        doc.text(`Progreso: ${completedItems} de ${totalItems} completados`, margin + 5, y);
-                        y += 8; // Espacio entre cards
-                        
-                        // Restore default black text color
-                        doc.setTextColor(colorDefaultGray[0], colorDefaultGray[1], colorDefaultGray[2]);
-                        
-                        // Línea divisoria suave
-                        doc.setDrawColor(230, 230, 230); // Color muy claro
-                        doc.line(margin, y, (210 - margin), y); 
-                        y += 5; 
-                    }
-                });
-            });
-            
-            // Si no se marcó nada, añadir una nota
-            if (!hasContent) {
+                // Si la imagen es demasiado alta, la ponemos en una nueva página
+                if (y + imgHeight > 270) {
+                    doc.addPage();
+                    y = 15;
+                }
+                
+                doc.addImage(experienceImgData, 'PNG', margin, y, imgWidth, imgHeight);
+                y += imgHeight + 10;
+            } else {
                 doc.setFontSize(12);
                 doc.setFont("helvetica", "italic");
-                doc.text("No se marcaron habilidades en el checklist (Punto 3).", pageCenter, y + 20, { align: 'center' });
+                doc.text("Gráfico de estadísticas de experiencia no disponible.", pageCenter, y + 5, { align: 'center' });
+                y += 15;
             }
-
+            
 
             // Guardar el PDF
             doc.save(`Autodiagnostico_PM_${name || 'report'}.pdf`);
@@ -876,10 +1036,28 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
         });
         
         // Ensure initial UI is rendered if window.onload fires too late
-        window.setTimeout(() => {
-            // El check se realiza en renderUI(), pero aseguramos que se llama
+        window.onload = function() {
+            // Inicialización de la aplicación
+            const userIdDisplay = document.getElementById('user-id-display');
+            if (userIdDisplay) userIdDisplay.classList.add('hidden');
+            
+            const saveStatus = document.getElementById('save-status');
+            if (saveStatus) saveStatus.classList.add('hidden');
+            
             renderUI();
-        }, 50);
+            updateButtonState();
+            
+            // CRÍTICO: Inicializar el selector y disparar el render del checklist/estadísticas
+            const initialExperience = '0-6 meses';
+            const selector = document.getElementById('experience-selector');
+            if (selector) {
+                selector.value = initialExperience; // Asegurar que el selector muestre 0-6
+                handleExperienceChange(initialExperience); // Forzar la carga de las cards y el gráfico
+            } else {
+                 // Si el selector no existe, al menos actualizar el UI
+                 updateStatsUI(initialExperience);
+            }
+        };
         
     </script>
 </head>
@@ -903,7 +1081,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             
             <div class="flex items-center space-x-4 text-sm">
                 <!-- Campo Nombre --><div class="flex flex-col items-start sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-2">
-                    <label for="name-input" class="font-semibold whitespace-rap">Nombre:</label>
+                    <label for="name-input" class="semibold whitespace-rap">Nombre:</label>
                     <input 
                         type="text" 
                         id="name-input" 
@@ -944,19 +1122,8 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             </div>
         </section>
 
-        <!-- SECTION 2: REFLECTIONS (Full Width, Grid Layout) --><section class="bg-white p-6 rounded-xl shadow-2xl border border-indigo-100">
-            <h2 class="text-2xl font-bold text-indigo-800 mb-6 border-b pb-2">2. Reflexión sobre Casos Prácticos</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="reflections-container">
-                <!-- Content generated by renderUI() --></div>
-            <!-- Nueva línea de instrucción al final de la sección --><div class="mt-6 col-span-full text-right">
-                <p class="text-xs text-gray-500 font-medium">
-                    * Si no se te viene nada a la cabeza para alguna pregunta, responde **N/A**.
-                </p>
-            </div>
-        </section>
-        
-        <!-- NUEVA SECTION 3: CHECKLIST HABILIDADES VS EXPERIENCIA --><section class="bg-white p-6 rounded-xl shadow-2xl border border-indigo-100 mt-8">
-            <h2 class="text-2xl font-bold text-indigo-800 mb-6 border-b pb-2">3. Checklist habilidades vs experiencia</h2>
+        <!-- SECTION 3 (NUEVO ORDEN): CHECKLIST HABILIDADES VS EXPERIENCIA --><section class="bg-white p-6 rounded-xl shadow-2xl border border-indigo-100 mt-8">
+            <h2 class="text-2xl font-bold text-indigo-800 mb-6 border-b pb-2">2. Checklist habilidades vs experiencia</h2>
             
             <!-- 3.1 Selector de Experiencia -->
             <div class="mb-8 p-4 bg-indigo-50 rounded-lg border border-indigo-200 shadow-inner flex flex-col md:flex-row justify-between items-center">
@@ -980,7 +1147,58 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                  aria-live="polite">
                 <!-- Cards se renderizarán aquí -->
             </div>
+            
+            <!-- SUB-SECCIÓN DE ESTADÍSTICAS -->
+            <div class="mt-8 pt-6 border-t border-gray-200">
+                <h3 class="text-xl font-bold text-indigo-800 mb-6">3. Estadísticas experiencia</h3>
+                
+                <!-- Resumen de Métricas (4 Columnas) -->
+                <div id="stats-summary" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    
+                    <!-- Total Items -->
+                    <div class="p-4 bg-gray-50 rounded-lg shadow-inner text-center">
+                        <p class="text-xl font-bold text-gray-800" id="stat-total">0</p>
+                        <p class="text-sm text-gray-600">Total de ítems</p>
+                    </div>
+                    
+                    <!-- Completadas -->
+                    <div class="p-4 bg-indigo-50 rounded-lg shadow-inner text-center">
+                        <p class="text-xl font-bold text-indigo-700" id="stat-completed">0</p>
+                        <p class="text-sm text-indigo-600">Completadas</p>
+                    </div>
+                    
+                    <!-- Sin completar -->
+                    <div class="p-4 bg-red-50 rounded-lg shadow-inner text-center">
+                        <p class="text-xl font-bold text-red-700" id="stat-uncompleted">0</p>
+                        <p class="text-sm text-red-600">Sin completar</p>
+                    </div>
+                    
+                    <!-- % Total Rellenado -->
+                    <div class="p-4 bg-green-50 rounded-lg shadow-inner text-center">
+                        <p class="text-xl font-bold text-green-700" id="stat-percent">0.0%</p>
+                        <p class="text-sm text-green-600">% Rellenado</p>
+                    </div>
+                    
+                </div>
+
+                <!-- Gráfico Histograma de Área -->
+                <div class="chart-container relative h-96 max-h-[400px]">
+                    <canvas id="experience-chart"></canvas>
+                </div>
+            </div>
         </section>
+
+        <!-- SECTION 2 (NUEVO ORDEN): REFLECTIONS (Full Width, Grid Layout) --><section class="bg-white p-6 rounded-xl shadow-2xl border border-indigo-100">
+            <h2 class="text-2xl font-bold text-indigo-800 mb-6 border-b pb-2">4. Reflexión sobre Casos Prácticos</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="reflections-container">
+                <!-- Content generated by renderUI() --></div>
+            <!-- Nueva línea de instrucción al final de la sección --><div class="mt-6 col-span-full text-right">
+                <p class="text-xs text-gray-500 font-medium">
+                    * Si no se te viene nada a la cabeza para alguna pregunta, responde **N/A**.
+                </p>
+            </div>
+        </section>
+        
         
         <!-- Botón de Exportación a PDF (Posición final debajo de la Sección 3) -->
         <div class="px-4 pb-4 flex justify-center flex-col items-center">
