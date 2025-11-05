@@ -13,7 +13,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Autodiagnóstico PM (Gráfico Radar)</title>
+    <title>Autodiagnóstico para PMs</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Librería para generar PDF --><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Librería Chart.js --><script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -780,7 +780,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             let y = 15; // Posición Y inicial
             
             const name = assessmentData.userName || '— Sin nombre —';
-            const userId = 'PORTABLE_SESSION'; // Usar un ID genérico para la descarga sin Firebase
+            const fileNameName = name.replace(/[^a-zA-Z0-9]/g, '_');
 
             // --- Definición de Colores para el PDF (RGB) ---
             const colorAccentRed = [255, 158, 129]; // #ff9e81 (para periodos incompletos)
@@ -792,7 +792,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             // ------------------------------------
             doc.setFontSize(22);
             doc.setFont("helvetica", "bold");
-            doc.text("Autodiagnóstico Product Manager (Mes 1)", pageCenter, y, { align: 'center' });
+            doc.text("Autodiagnóstico para PMs", pageCenter, y, { align: 'center' });
             y += 8;
             
             // Nombre de la persona (centrado)
@@ -908,7 +908,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                         
                         // Línea divisoria suave
                         doc.setDrawColor(230, 230, 230); // Color muy claro
-                        doc.line(margin, y, (210 - margin), y); 
+                        doc.line(margin, y, (210 - margin), y); // Línea de margen a margen
                         y += 5; 
                     }
                 });
@@ -1027,7 +1027,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             
 
             // Guardar el PDF
-            doc.save(`Autodiagnostico_PM_${name || 'report'}.pdf`);
+            doc.save(`Autodiagnostico_PM_${fileNameName}.pdf`);
         }
         
         // Ensure chart redraws on window resize
@@ -1077,7 +1077,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
 
     <!-- Header --><header class="bg-indigo-700 text-white p-4 shadow-lg sticky top-0 z-10">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
-            <h1 class="text-xl sm:text-3xl font-extrabold tracking-tight">Autodiagnóstico PM (Mes 1)</h1>
+            <h1 class="text-xl sm:text-3xl font-extrabold tracking-tight">Autodiagnóstico para PMs</h1>
             
             <div class="flex items-center space-x-4 text-sm">
                 <!-- Campo Nombre --><div class="flex flex-col items-start sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-2">
