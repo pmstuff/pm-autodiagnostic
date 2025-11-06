@@ -17,6 +17,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Librería para generar PDF --><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Librería Chart.js --><script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
     <style>
         /* Definición de colores custom para el botón, basados en el color del gráfico */
         .bg-chart-accent { background-color: #ff9e81; }
@@ -141,9 +142,19 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
 
             const progressText = card.querySelector('.progress-text');
             const progressBar = card.querySelector('.progress-bar');
+            const congratsMessageContainer = card.querySelector('.congrats-message'); // Contenedor del mensaje
             
             if (progressText) progressText.textContent = `${completed}/${total} adquiridos`; // CAMBIO A "ADQUIRIDOS"
             if (progressBar) progressBar.style.width = `${percentage}%`;
+            
+            // Lógica del mensaje de felicitación
+            if (congratsMessageContainer) {
+                if (completed === total) {
+                    congratsMessageContainer.innerHTML = `<p class="text-blue-500 text-[0.65rem] font-bold">¡Enhorabuena! Ya lo tienes 🎉</p>`;
+                } else {
+                    congratsMessageContainer.innerHTML = ''; // Limpiar si no está completo
+                }
+            }
         }
 
         // --- MANEJO DE LA EXPERIENCIA Y RENDERIZADO DEL CHECKLIST ---
@@ -201,14 +212,18 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                             </div>
 
                             <!-- Barra de progreso -->
-                            <div class="pt-4 border-t border-gray-200">
-                                <div class="flex justify-between items-center text-sm font-semibold">
-                                    <p class="progress-text text-gray-700"></p>
-                                    <p class="text-indigo-600">${period}</p>
+                            <div class="pt-4 border-t border-gray-200 flex justify-between items-end">
+                                <div class="flex-grow">
+                                    <div class="flex justify-between items-center text-sm font-semibold">
+                                        <p class="progress-text text-gray-700"></p>
+                                        <p class="text-indigo-600">${period}</p>
+                                    </div>
+                                    <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
+                                        <div class="progress-bar h-2 rounded-full bg-indigo-500 transition-all duration-500 ease-out" style="width: 0%"></div>
+                                    </div>
                                 </div>
-                                <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
-                                    <div class="progress-bar h-2 rounded-full bg-indigo-500 transition-all duration-500 ease-out" style="width: 0%"></div>
-                                </div>
+                                <!-- Mensaje de Felicitación -->
+                                <div class="congrats-message ml-4 w-fit min-w-[100px] text-right"></div>
                             </div>
                         </div>
                     `;
@@ -438,6 +453,8 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             const exportBtn = document.getElementById('export-pdf-btn');
             const exportHint = document.getElementById('export-hint'); 
             
+            // Solo actualizamos el botón de DESCARGAR PDF, ya que el de EMAIL ha sido eliminado
+
             if (exportBtn) {
                 exportBtn.disabled = !isComplete;
                 
@@ -900,7 +917,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                         doc.setFontSize(12);
                         doc.setFont("helvetica", "bold");
                         doc.setTextColor(currentColor[0], currentColor[1], currentColor[2]);
-                        doc.text(`Progreso: ${completedItems} de ${totalItems} adquiridos`, margin + 5, y); // CAMBIO EN PDF
+                        doc.text(`Progreso: ${completedItems} de ${totalItems} adquiridos`, margin + 5, y); 
                         y += 8; // Espacio entre cards
                         
                         // Restore default black text color
@@ -909,7 +926,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                         // Línea divisoria suave
                         doc.setDrawColor(230, 230, 230); // Color muy claro
                         doc.line(margin, y, (210 - margin), y); // Línea de margen a margen
-                        y += 5; 
+                        y += 7; // Espacio después de la línea
                     }
                 });
             });
@@ -922,15 +939,57 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             }
 
             // ------------------------------------
-            // 3. Reflexiones (Punto 3) - NUEVA PÁGINA
+            // 3. Gráfico de Experiencia (Punto 3) - GRÁFICO INMEDIATAMENTE DESPUÉS DEL CHECKLIST
+            // ------------------------------------
+
+            // Comprobar si hay espacio para el título del gráfico
+            // ¡Importante!: La comprobación de y > 240 aquí es CRÍTICA para evitar el corte con la Parte 2/Checklist.
+            if (y > 240) { 
+                doc.addPage();
+                y = 15;
+            } else {
+                y += 10;
+            }
+
+            doc.setFontSize(18);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(colorDefaultGray[0], colorDefaultGray[1], colorDefaultGray[2]);
+            doc.text("3. Resumen Gráfico de Experiencia", pageCenter, y, { align: 'center' });
+            y += 10;
+
+            const experienceCanvas = document.getElementById('experience-chart');
+            if (experienceCanvas) {
+                const experienceImgData = experienceCanvas.toDataURL('image/png');
+                
+                // Dimensiones para que quepa bien en A4
+                const imgWidth = contentWidth;
+                const imgHeight = (experienceCanvas.height * imgWidth) / experienceCanvas.width;
+
+                // Si la imagen es demasiado alta, la ponemos en una nueva página
+                if (y + imgHeight > 270) {
+                    doc.addPage();
+                    y = 15;
+                }
+                
+                doc.addImage(experienceImgData, 'PNG', margin, y, imgWidth, imgHeight);
+                y += imgHeight + 10;
+            } else {
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "italic");
+                doc.text("Gráfico de estadísticas de experiencia no disponible.", pageCenter, y + 5, { align: 'center' });
+                y += 15;
+            }
+            
+            // ------------------------------------
+            // 4. Reflexiones (Punto 4) - NUEVA PÁGINA
             // ------------------------------------
             
-            doc.addPage(); // Salto de página
+            doc.addPage(); // Salto de página para la reflexión
             y = 15; // Resetear Y para la nueva página
             
             doc.setFontSize(18);
             doc.setFont("helvetica", "bold");
-            doc.text("3. Reflexión sobre Casos Prácticos", pageCenter, y, { align: 'center' });
+            doc.text("4. Reflexión sobre Casos Prácticos", pageCenter, y, { align: 'center' });
             y += 10;
             
             const reflections = [
@@ -984,50 +1043,9 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                 }
             });
             
-            // ------------------------------------
-            // 4. Gráfico de Experiencia (Punto 4) - ÚLTIMA SECCIÓN
-            // ------------------------------------
-
-            // Comprobar si hay espacio o añadir nueva página
-            if (y > 240) { 
-                doc.addPage();
-                y = 15;
-            } else {
-                y += 10;
-            }
-
-            doc.setFontSize(18);
-            doc.setFont("helvetica", "bold");
-            doc.setTextColor(colorDefaultGray[0], colorDefaultGray[1], colorDefaultGray[2]);
-            doc.text("4. Resumen Gráfico de Experiencia", pageCenter, y, { align: 'center' });
-            y += 10;
-
-            const experienceCanvas = document.getElementById('experience-chart');
-            if (experienceCanvas) {
-                const experienceImgData = experienceCanvas.toDataURL('image/png');
-                
-                // Dimensiones para que quepa bien en A4
-                const imgWidth = contentWidth;
-                const imgHeight = (experienceCanvas.height * imgWidth) / experienceCanvas.width;
-
-                // Si la imagen es demasiado alta, la ponemos en una nueva página
-                if (y + imgHeight > 270) {
-                    doc.addPage();
-                    y = 15;
-                }
-                
-                doc.addImage(experienceImgData, 'PNG', margin, y, imgWidth, imgHeight);
-                y += imgHeight + 10;
-            } else {
-                doc.setFontSize(12);
-                doc.setFont("helvetica", "italic");
-                doc.text("Gráfico de estadísticas de experiencia no disponible.", pageCenter, y + 5, { align: 'center' });
-                y += 15;
-            }
-            
-
-            // Guardar el PDF
+            // Descargamos el PDF (sin parámetro de email)
             doc.save(`Autodiagnostico_PM_${fileNameName}.pdf`);
+
         }
         
         // Ensure chart redraws on window resize
@@ -1059,6 +1077,12 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             }
         };
         
+        // Exponer funciones globalmente para su uso en controladores de eventos HTML en línea
+        window.handleNameChange = handleNameChange;
+        window.handleScoreChange = handleScoreChange;
+        window.handleReflectionChange = handleReflectionChange;
+        window.exportPDF = exportPDF;
+
     </script>
 </head>
 <body class="bg-gray-50 min-h-screen font-sans">
@@ -1148,8 +1172,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
                 <!-- Cards se renderizarán aquí -->
             </div>
             
-            <!-- SUB-SECCIÓN DE ESTADÍSTICAS -->
-            <div class="mt-8 pt-6 border-t border-gray-200">
+            <!-- SUB-SECCIÓN DE ESTADÍSTICAS (Ahora parte lógica del Punto 2/Checklist) --><div class="mt-8 pt-6 border-t border-gray-200">
                 <h3 class="text-xl font-bold text-indigo-800 mb-6">3. Estadísticas experiencia</h3>
                 
                 <!-- Resumen de Métricas (4 Columnas) -->
@@ -1188,7 +1211,7 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
             </div>
         </section>
 
-        <!-- SECTION 2 (NUEVO ORDEN): REFLECTIONS (Full Width, Grid Layout) --><section class="bg-white p-6 rounded-xl shadow-2xl border border-indigo-100">
+        <!-- SECTION 4 (NUEVO ORDEN): REFLECTIONS (Full Width, Grid Layout) --><section class="bg-white p-6 rounded-xl shadow-2xl border border-indigo-100">
             <h2 class="text-2xl font-bold text-indigo-800 mb-6 border-b pb-2">4. Reflexión sobre Casos Prácticos</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="reflections-container">
                 <!-- Content generated by renderUI() --></div>
@@ -1201,10 +1224,13 @@ CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. --><!DOCTYPE html>
         
         
         <!-- Botón de Exportación a PDF (Posición final debajo de la Sección 3) -->
-        <div class="px-4 pb-4 flex justify-center flex-col items-center">
-            <!-- El botón es inicialmente deshabilitado por el script --><button id="export-pdf-btn" onclick="checkFormCompletion() ? exportPDF() : showSnackbar('Completa las respuestas para poder exportarlo');" class="bg-gray-400 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-pink-400 focus:ring-opacity-50" disabled>
-                Exportar a PDF
+        <div class="px-4 pb-4 flex justify-center flex-col items-center space-y-2">
+            
+            <!-- Botón de Descargar PDF (Único botón) -->
+            <button id="export-pdf-btn" onclick="checkFormCompletion() ? exportPDF() : showSnackbar('Completa las respuestas para poder exportarlo');" class="bg-gray-400 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-pink-400 focus:ring-opacity-50" disabled>
+                Descargar PDF
             </button>
+            
             <!-- Hint para el usuario --><p id="export-hint" class="text-xs text-gray-400 mt-2 text-center" style="display: none;">
                 (Para poder exportar a PDF rellena todas las preguntas de la Parte 4)
             </p>
